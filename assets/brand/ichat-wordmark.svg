@@ -1,0 +1,28 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 96" fill="none" color="#111317">
+  <title>IChat wordmark - aligned I center to C center</title>
+  <g stroke="currentColor" stroke-width="10.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- I -->
+    <path d="M10 17H34" />
+    <path d="M22 17V79" />
+    <path d="M10 79H34" />
+
+    <!-- C -->
+    <path d="M88 27A23 23 0 1 0 88 69" />
+
+    <!-- h -->
+    <path d="M108 22V68" />
+    <path d="M108 52Q108 38 123 38Q138 38 138 54V68" />
+
+    <!-- a -->
+    <path d="M174 40A14 14 0 1 1 174 68A14 14 0 1 1 174 40" />
+    <path d="M188 40V68" />
+
+    <!-- t -->
+    <path d="M223 24V68" />
+    <path d="M209 38H247" />
+
+    <!-- subtle AI accent -->
+    <path d="M52 25H66" />
+    <path d="M59 18V32" />
+  </g>
+</svg>

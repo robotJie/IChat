@@ -1,0 +1,128 @@
+﻿# IChat
+
+![IChat logotype](assets/brand/ichat-lockup-horizontal.svg)
+
+Brand assets and usage notes live in [docs/logotype.md](docs/logotype.md).
+
+IChat is a Chrome side panel extension for context-native AI chat.
+It captures context from the current webpage, turns it into a structured `FlowContext`, assembles a prompt automatically, and sends it to the selected model provider inside a native side panel chat UI.
+
+Current stack:
+- `Plasmo`
+- `Vercel AI SDK`
+- `@plasmohq/storage`
+- `assistant-ui` is still present in the repo, but the live chat surface now uses a controlled React conversation layer for stability inside the extension runtime
+
+## What Works
+
+- `Plan 1`: selection-first capture
+- `Plan 2`: smart DOM capture when there is no text selection
+- `Bonus 1`: shortcut-triggered capture -> `FlowContext` -> prompt assembly -> side panel chat send
+- Native side panel chat UI with a chat-first shell
+- Non-chat controls grouped behind a single gear-shaped `Settings` button
+- `Expand` into a detached tab
+- BYOK support for `OpenAI`, `Gemini`, and `Anthropic`
+- Single-source-of-truth chat state in the UI, with storage used for boot + persistence snapshots
+
+## FlowContext
+
+`FlowContext` contains the context sensed by the extension, including:
+- page metadata: `tabId`, `windowId`, `title`, `url`, `host`
+- trigger metadata: command, source, capture mode
+- selected text and selection locators
+- smart DOM target text and locator
+- implicit context text
+- viewport and document metadata
+
+Core shape is defined in [src/lib/types.ts](/E:/Projects/IChat/src/lib/types.ts).
+
+## Project Structure
+
+- [src/background.ts](/E:/Projects/IChat/src/background.ts): shortcut handling, side panel opening, capture orchestration
+- [src/contents/page-capture.ts](/E:/Projects/IChat/src/contents/page-capture.ts): in-page capture UX, smart DOM targeting, glow highlight
+- [src/lib/flow-context.js](/E:/Projects/IChat/src/lib/flow-context.js): `FlowContext` construction and DOM heuristics
+- [src/lib/prompt-builder.ts](/E:/Projects/IChat/src/lib/prompt-builder.ts): prompt assembly and provider defaults
+- [src/lib/storage.ts](/E:/Projects/IChat/src/lib/storage.ts): extension storage, migration, normalization
+- [src/lib/chat-agent.ts](/E:/Projects/IChat/src/lib/chat-agent.ts): direct provider model creation, AI SDK `generateText`, provider-specific error mapping
+- [src/components/IChatApp.tsx](/E:/Projects/IChat/src/components/IChatApp.tsx): chat-first shell with a settings drawer for provider, FlowContext, and preferences
+- [src/components/ProviderConversation.tsx](/E:/Projects/IChat/src/components/ProviderConversation.tsx): controlled chat surface with one live React state per provider
+- [src/tabs/chat.tsx](/E:/Projects/IChat/src/tabs/chat.tsx): detached chat tab entry
+- [extension/](/E:/Projects/IChat/extension): legacy MV3 prototype kept for reference only
+
+## Development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run development build:
+
+```bash
+npm run dev
+```
+
+Create production build:
+
+```bash
+npm run build
+```
+
+The production extension output is generated under [build/chrome-mv3-prod](/E:/Projects/IChat/build/chrome-mv3-prod).
+
+## Load In Chrome
+
+1. Open `chrome://extensions/`
+2. Enable `Developer mode`
+3. Click `Load unpacked`
+4. Select [build/chrome-mv3-prod](/E:/Projects/IChat/build/chrome-mv3-prod)
+
+## Usage
+
+1. Open the side panel
+2. Click `Settings` once to add your API key and choose a provider/model
+3. Open a normal `http/https` webpage
+4. Press `Ctrl+Shift+Y` on Windows or `Command+Shift+Y` on macOS
+5. If text is selected, IChat uses that first
+6. Otherwise it enters smart DOM capture mode
+7. The main surface stays focused on chat, while captured context and prompt preview are available from `Settings`
+8. If auto-send is enabled, the prompt is sent to the active provider immediately
+9. If auto-send is off, the composer shows an `IChat Ctx` attachment above the input box; click it to edit the live-synced FlowContext in a centered modal, then type your own question and send it together with that context
+
+## Provider Notes
+
+### Gemini
+
+Gemini uses the Google Generative AI provider from `@ai-sdk/google` directly.
+
+Important details:
+- Use a Google AI Studio Gemini API key
+- That key usually starts with `AIza`
+- Recommended stable model: `gemini-2.5-flash`
+- Preview alternative: `gemini-3-flash-preview`
+- Old model ids like `gemini-3.0-flash-preview` are automatically migrated in storage
+
+If you see an error about `unregistered callers`, the key is usually missing, invalid, restricted, or not a Gemini API key from AI Studio.
+
+## Notes On The Chat Stack
+
+The live chat UI now follows a simpler ownership model:
+- React local state owns the active thread
+- `chrome.storage` is only used to load the initial snapshot and persist completed updates
+- provider calls go directly through AI SDK provider modules + `generateText`
+
+This avoids runtime fights between third-party chat state, React props, and extension storage.
+
+## Current Limits
+
+- Plans 3 and 4 are not implemented yet
+- Responses are currently returned as full turns, not token-streamed partial text
+- No vision fallback for canvas-heavy pages yet
+- Restricted pages such as `chrome://`, Chrome Web Store pages, and some internal viewers cannot be scripted
+- BYOK is client-side today, so keys live in extension local storage
+
+## Architecture Notes
+
+See [docs/architecture.md](/E:/Projects/IChat/docs/architecture.md) for a higher-level module and data-flow overview.
+
