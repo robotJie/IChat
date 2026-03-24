@@ -57,6 +57,11 @@ interface IChatAppProps {
 
 export function IChatApp({ viewMode }: IChatAppProps) {
   const [appState, setAppState] = useState<AppState>(INITIAL_STATE)
+  const [threadClearSignals, setThreadClearSignals] = useState<Record<ProviderId, number>>({
+    openai: 0,
+    gemini: 0,
+    anthropic: 0
+  })
   const [settingsOpen, setSettingsOpen] = useState(false)
   const deferredFlowContext = useDeferredValue(appState.flowContext)
   const gearButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -253,6 +258,10 @@ export function IChatApp({ viewMode }: IChatAppProps) {
     }
 
     await clearChatThread(activeProvider)
+    setThreadClearSignals((current) => ({
+      ...current,
+      [activeProvider]: current[activeProvider] + 1
+    }))
     await setDispatchStatus(dispatchStatusPayload("idle", `Cleared ${providerLabels[activeProvider]} conversation`, activeProvider, null))
   }
 
@@ -291,6 +300,7 @@ export function IChatApp({ viewMode }: IChatAppProps) {
           apiKeys={appState.apiKeys}
           pendingPrompt={appState.pendingPrompt}
           flowContext={appState.flowContext}
+          threadClearSignal={threadClearSignals[activeProvider]}
         />
       </div>
 

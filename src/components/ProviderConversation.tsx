@@ -24,6 +24,7 @@ interface ProviderConversationProps {
   apiKeys: IChatApiKeys
   pendingPrompt: PendingPrompt | null
   flowContext: FlowContext | null
+  threadClearSignal: number
 }
 
 interface FlowContextEditorState {
@@ -1046,7 +1047,7 @@ function DraftContextModal(props: {
   )
 }
 
-export function ProviderConversation({ provider, settings, apiKeys, pendingPrompt, flowContext }: ProviderConversationProps) {
+export function ProviderConversation({ provider, settings, apiKeys, pendingPrompt, flowContext, threadClearSignal }: ProviderConversationProps) {
   const currentModel = getProviderModel(settings, provider)
   const currentKey = getProviderKey(provider, apiKeys)
   const [hydrated, setHydrated] = useState(false)
@@ -1139,6 +1140,22 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
   useEffect(() => {
     isBusyRef.current = isBusy
   }, [isBusy])
+
+  useEffect(() => {
+    if (threadClearSignal === 0) {
+      return
+    }
+
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    activePendingIdRef.current = null
+    shouldStickToBottomRef.current = true
+    lastPersistedJsonRef.current = "[]"
+    messagesRef.current = []
+    setMessages([])
+    setIsBusy(false)
+    setErrorBanner(null)
+  }, [threadClearSignal])
 
   const scrollThreadToBottom = useCallback(() => {
     const viewport = viewportRef.current
