@@ -1596,19 +1596,20 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
       }
 
       const attachmentId = crypto.randomUUID()
-      const filename = file.name || `pasted-image-${index + 1}.${file.type.includes("png") ? "png" : "jpg"}`
+      const filename = file.name || `pasted-image-${index + 1}.${file.type.includes("svg") ? "svg" : file.type.includes("png") ? "png" : "jpg"}`
+      const normalized = await normalizeImageBlob(file, filename)
       await putAttachmentBlob({
         id: attachmentId,
-        blob: file,
-        mediaType: file.type || "image/png",
-        filename
+        blob: normalized.blob,
+        mediaType: normalized.mediaType,
+        filename: normalized.filename
       })
 
       nextAttachments.push({
         id: attachmentId,
-        mediaType: file.type || "image/png",
-        filename,
-        label: filename,
+        mediaType: normalized.mediaType,
+        filename: normalized.filename,
+        label: normalized.filename || filename,
         url: getAttachmentUrl(attachmentId),
         source: "composer"
       })

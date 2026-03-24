@@ -340,13 +340,11 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
       })
     }
 
-    if (settings.context.showImplicitContext) {
-      if (flowContext.implicitContext?.text?.trim()) {
-        cards.push({
-          label: "Implicit context",
-          value: snippet(flowContext.implicitContext.text, previewLength, "No implicit context")
-        })
-      }
+    if (flowContext.implicitContext?.text?.trim()) {
+      cards.push({
+        label: "Implicit context",
+        value: snippet(flowContext.implicitContext.text, previewLength, "No implicit context")
+      })
     }
 
     if (flowContext.attachments.length) {
@@ -356,17 +354,15 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
       })
     }
 
-    if (settings.context.showLocator) {
-      if (displayedLocator) {
-        cards.push({
-          label: "Locator",
-          value: snippet(displayedLocator, previewLength, "No locator")
-        })
-      }
+    if (displayedLocator) {
+      cards.push({
+        label: "Locator",
+        value: snippet(displayedLocator, previewLength, "No locator")
+      })
     }
 
     return cards
-  }, [displayedLocator, flowContext, previewLength, settings.context.showImplicitContext, settings.context.showLocator])
+  }, [displayedLocator, flowContext, previewLength])
 
   const flowContextParts = useMemo(() => {
     if (!flowContext) {
@@ -383,24 +379,20 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
       parts.push(flowContext.smartTarget.kind === "image" ? "Image target" : flowContext.smartTarget.kind === "video" ? "Video target" : "Smart target")
     }
 
-    if (settings.context.showImplicitContext) {
-      if (flowContext.implicitContext?.text?.trim()) {
-        parts.push("Implicit context")
-      }
+    if (flowContext.implicitContext?.text?.trim()) {
+      parts.push("Implicit context")
     }
 
     if (flowContext.attachments.length) {
       parts.push(`${flowContext.attachments.length} attachment${flowContext.attachments.length === 1 ? "" : "s"}`)
     }
 
-    if (settings.context.showLocator) {
-      if (displayedLocator) {
-        parts.push("Locator")
-      }
+    if (displayedLocator) {
+      parts.push("Locator")
     }
 
     return parts
-  }, [displayedLocator, flowContext, settings.context.showImplicitContext, settings.context.showLocator])
+  }, [displayedLocator, flowContext])
 
   useEffect(() => {
     backButtonRef.current?.focus()
@@ -476,12 +468,12 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     if (activeSection === "general") {
       return (
         <section className="ichat-settings-page-section">
-          <SettingsSectionHeader title="General" description="Control confirmation behavior and clear local chat state without touching provider keys." />
+          <SettingsSectionHeader title="General" description="Control confirmation behavior and local chat state without touching provider keys." />
 
           <div className="ichat-settings-panel">
             <SettingsRow
               label="Confirm destructive actions"
-              description="Ask before clearing threads or resetting the current FlowContext draft."
+              description="Ask before clearing threads or removing the current captured FlowContext."
               control={
                 <button
                   className={`ichat-toggle ${settings.data.confirmDestructiveActions ? "is-on" : ""}`}
@@ -522,16 +514,6 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
               }
               danger
             />
-            <SettingsRow
-              label="Current FlowContext draft"
-              description="Remove the current FlowContext and pending prompt from local storage, without changing your provider settings or API keys."
-              control={
-                <button className="ichat-danger-button" type="button" onClick={onResetContext}>
-                  Reset context draft
-                </button>
-              }
-              danger
-            />
           </div>
         </section>
       )
@@ -565,7 +547,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     if (activeSection === "context") {
       return (
         <section className="ichat-settings-page-section">
-          <SettingsSectionHeader title="FlowContext" description="Inspect the latest FlowContext, review the generated prompt, and control how much detail the UI shows." />
+          <SettingsSectionHeader title="FlowContext" description="Inspect the latest FlowContext, review the generated prompt, and manage the captured context." />
 
           <div className="ichat-settings-panel">
             <SettingsRow
@@ -592,30 +574,6 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
                   ]}
                   onChange={(value) => void onSettingsChange({ context: { previewDensity: value } })}
                 />
-              }
-            />
-            <SettingsRow
-              label="Show locator details"
-              description="Display XPath or CSS path details in the context inspector."
-              control={
-                <button
-                  className={`ichat-toggle ${settings.context.showLocator ? "is-on" : ""}`}
-                  type="button"
-                  onClick={() => void onSettingsChange({ context: { showLocator: !settings.context.showLocator } })}>
-                  {settings.context.showLocator ? "Visible" : "Hidden"}
-                </button>
-              }
-            />
-            <SettingsRow
-              label="Show implicit context"
-              description="Include the implicit context block in the visual inspector for quicker review."
-              control={
-                <button
-                  className={`ichat-toggle ${settings.context.showImplicitContext ? "is-on" : ""}`}
-                  type="button"
-                  onClick={() => void onSettingsChange({ context: { showImplicitContext: !settings.context.showImplicitContext } })}>
-                  {settings.context.showImplicitContext ? "Visible" : "Hidden"}
-                </button>
               }
             />
           </div>
@@ -704,6 +662,9 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
               <div className="ichat-settings-actions-row">
                 <button className="ichat-secondary-button" type="button" onClick={onCopyPrompt}>
                   Copy prompt
+                </button>
+                <button className="ichat-danger-button" type="button" onClick={onResetContext}>
+                  Clear captured context
                 </button>
                 <button className="ichat-primary-button" type="button" onClick={onSendCurrentContext}>
                   {pendingState === "error" ? "Retry send" : "Send current context"}
