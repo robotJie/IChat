@@ -7,10 +7,12 @@ import {
   attachmentUrlFromId,
   blobToUint8Array,
   createObjectUrlForBlob,
+  dataUrlToBlob,
   getAttachmentBlob,
   putAttachmentBlob,
   revokeObjectUrl
 } from "../lib/attachment-repository"
+import { normalizeImageBlob } from "../lib/media-processing"
 import { composeFlowPrompt, dispatchStatusPayload, getFlowContextMode, getProviderModel, isAutoSendEnabled, providerLabels } from "../lib/prompt-builder"
 import { getChatThreads, setChatThread, setDispatchStatus, setFlowContext, setPendingPrompt, updateFlowContextDraft } from "../lib/storage"
 import { getVisionBlockedMessage, supportsVisionInput } from "../lib/vision-capabilities"
@@ -52,6 +54,8 @@ type MarkdownBlock =
   | { type: "code"; language: string | null; text: string }
   | { type: "list"; ordered: boolean; items: string[] }
   | { type: "table"; headers: string[]; alignments: TableAlignment[]; rows: string[][] }
+
+const UNSUPPORTED_MODEL_IMAGE_MEDIA_TYPES = new Set(["image/svg+xml"])
 
 function extractUiMessageText(message: UIMessage) {
   return message.parts
@@ -120,6 +124,40 @@ function removeMessage(messages: UIMessage[], messageId: string) {
 async function filePartToModelPart(part: FileUIPart) {
   const url = part.url
   if (part.mediaType.startsWith("image/")) {
+    const normalizeUnsupportedModelImage = async (blob: Blob, fallbackMediaType: string) => {
+      const normalized = await normalizeImageBlob(blob, part.filename)
+      const nextMediaType = normalized.mediaType || fallbackMediaType || blob.type || "image/png"
+
+      if (UNSUPPORTED_MODEL_IMAGE_MEDIA_TYPES.has(nextMediaType)) {
+        throw new Error(`Unsupported image attachment type: ${nextMediaType}`)
+      }
+
+      return {
+        type: "image" as const,
+        image: await blobToUint8Array(normalized.blob),
+        mediaType: nextMediaType
+      }
+    }
+
+    if (UNSUPPORTED_MODEL_IMAGE_MEDIA_TYPES.has(part.mediaType)) {
+      if (url.startsWith("data:")) {
+        return normalizeUnsupportedModelImage(await dataUrlToBlob(url), part.mediaType)
+      }
+
+      const attachmentId = attachmentIdFromUrl(url)
+      if (attachmentId) {
+        const blob = await getAttachmentBlob(attachmentId)
+        if (!blob) {
+          throw new Error(`Attachment '${attachmentId}' is no longer available.`)
+        }
+
+        return normalizeUnsupportedModelImage(blob, part.mediaType)
+      }
+
+      const blob = await fetch(url).then((response) => response.blob())
+      return normalizeUnsupportedModelImage(blob, part.mediaType)
+    }
+
     if (url.startsWith("data:")) {
       return {
         type: "image" as const,

@@ -1,6 +1,7 @@
 import type { RectDescriptor } from "./types"
 
 const MAX_IMAGE_DIMENSION = 2048
+type CanvasLike = OffscreenCanvas | HTMLCanvasElement
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -53,12 +54,36 @@ async function blobToImageBitmap(blob: Blob) {
   return createImageBitmap(blob)
 }
 
-function createCanvas(width: number, height: number) {
+function createCanvas(width: number, height: number): CanvasLike {
   if (typeof OffscreenCanvas !== "undefined") {
     return new OffscreenCanvas(width, height)
   }
 
-  throw new Error("OffscreenCanvas is not available in this runtime")
+  if (typeof document !== "undefined") {
+    const canvas = document.createElement("canvas")
+    canvas.width = width
+    canvas.height = height
+    return canvas
+  }
+
+  throw new Error("Canvas is not available in this runtime")
+}
+
+async function canvasToBlob(canvas: CanvasLike, type: string, quality: number) {
+  if ("convertToBlob" in canvas) {
+    return canvas.convertToBlob({ type, quality })
+  }
+
+  return await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("Canvas export failed"))
+        return
+      }
+
+      resolve(blob)
+    }, type, quality)
+  })
 }
 
 export async function normalizeImageBlob(blob: Blob, preferredFileName?: string | null) {
@@ -77,13 +102,16 @@ export async function normalizeImageBlob(blob: Blob, preferredFileName?: string 
 
     if (shouldRasterize || scale !== 1) {
       const canvas = createCanvas(width, height)
-      const context = canvas.getContext("2d")
+      const context = canvas.getContext("2d") as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null
       if (!context) {
         throw new Error("Unable to acquire 2D context for normalization")
       }
+      if (typeof context.drawImage !== "function") {
+        throw new Error("Canvas context does not support drawImage")
+      }
 
       context.drawImage(bitmap, 0, 0, width, height)
-      workingBlob = await canvas.convertToBlob({ type: "image/png", quality: 0.92 })
+      workingBlob = await canvasToBlob(canvas, "image/png", 0.92)
       mediaType = "image/png"
     }
 
@@ -125,11 +153,14 @@ export async function cropVisibleTabDataUrl(options: {
   const sourceHeight = Math.max(1, sourceBottom - sourceY)
 
   const canvas = createCanvas(sourceWidth, sourceHeight)
-  const context = canvas.getContext("2d")
+  const context = canvas.getContext("2d") as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null
   if (!context) {
     throw new Error("Unable to acquire 2D context for screenshot crop")
   }
+  if (typeof context.drawImage !== "function") {
+    throw new Error("Canvas context does not support drawImage")
+  }
 
   context.drawImage(bitmap, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, sourceWidth, sourceHeight)
-  return canvas.convertToBlob({ type: "image/png", quality: 0.92 })
+  return canvasToBlob(canvas, "image/png", 0.92)
 }
