@@ -262,6 +262,15 @@ function normalizeModelId(provider: ProviderId, modelId: unknown): string {
   return alias || raw
 }
 
+function clampHistoryMessageLimit(value: unknown): number {
+  const numeric = typeof value === "number" ? value : typeof value === "string" ? Number.parseInt(value, 10) : Number.NaN
+  if (!Number.isFinite(numeric)) {
+    return DEFAULT_SETTINGS.data.historyMessageLimit
+  }
+
+  return Math.min(100, Math.max(0, Math.trunc(numeric)))
+}
+
 export function normalizeSettings(value: unknown): IChatSettings {
   const settings = isRecord(value) ? value : {}
   const providers = isRecord(settings.providers) ? settings.providers : {}
@@ -317,7 +326,8 @@ export function normalizeSettings(value: unknown): IChatSettings {
       confirmDestructiveActions:
         typeof data.confirmDestructiveActions === "boolean"
           ? data.confirmDestructiveActions
-          : DEFAULT_SETTINGS.data.confirmDestructiveActions
+          : DEFAULT_SETTINGS.data.confirmDestructiveActions,
+      historyMessageLimit: clampHistoryMessageLimit(data.historyMessageLimit)
     }
   }
 }

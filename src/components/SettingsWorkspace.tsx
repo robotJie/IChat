@@ -67,6 +67,14 @@ function snippet(value?: string | null, maxLength = 200, fallback = "Unavailable
   return value.length > maxLength ? `${value.slice(0, maxLength).trimEnd()}...` : value
 }
 
+function clampHistoryMessageLimit(value: number) {
+  if (!Number.isFinite(value)) {
+    return 6
+  }
+
+  return Math.min(100, Math.max(0, Math.trunc(value)))
+}
+
 function formatSmartTargetPreview(flowContext: FlowContext, maxLength: number) {
   const target = flowContext.smartTarget
   if (!target) {
@@ -481,6 +489,27 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
                   onClick={() => void onSettingsChange({ data: { confirmDestructiveActions: !settings.data.confirmDestructiveActions } })}>
                   {settings.data.confirmDestructiveActions ? "Required" : "Off"}
                 </button>
+              }
+            />
+            <SettingsRow
+              label="Messages sent with each request"
+              description="Limit how many recent chat messages are attached when sending a new request. Defaults to 6. Set 0 for fresh one-off sends."
+              control={
+                <input
+                  className="ichat-settings-input ichat-settings-input-number"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={settings.data.historyMessageLimit}
+                  onChange={(event) =>
+                    void onSettingsChange({
+                      data: {
+                        historyMessageLimit: clampHistoryMessageLimit(Number.parseInt(event.target.value || "0", 10))
+                      }
+                    })
+                  }
+                />
               }
             />
             <SettingsRow

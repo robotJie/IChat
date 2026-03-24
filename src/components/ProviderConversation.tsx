@@ -121,6 +121,14 @@ function removeMessage(messages: UIMessage[], messageId: string) {
   return messages.filter((message) => message.id !== messageId)
 }
 
+function limitHistoryMessages(messages: UIMessage[], limit: number) {
+  if (limit <= 0) {
+    return []
+  }
+
+  return messages.slice(-limit)
+}
+
 async function filePartToModelPart(part: FileUIPart) {
   const url = part.url
   if (part.mediaType.startsWith("image/")) {
@@ -1418,7 +1426,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
       const displayMessage = createMessage("user", displayValue || requestValue, fileParts)
       const requestMessage = createMessage("user", requestValue || displayValue, fileParts)
       const displayedHistory = messagesRef.current
-      const requestMessages = [...displayedHistory, requestMessage]
+      const requestMessages = [...limitHistoryMessages(displayedHistory, settings.data.historyMessageLimit), requestMessage]
       const assistantMessageId = crypto.randomUUID()
       const optimisticMessages = [...displayedHistory, displayMessage, createMessage("assistant", "", [], assistantMessageId)]
       shouldStickToBottomRef.current = true

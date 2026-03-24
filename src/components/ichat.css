@@ -595,6 +595,11 @@ a:focus-visible {
   padding: 12px 14px;
 }
 
+.ichat-settings-input-number {
+  width: 112px;
+  text-align: right;
+}
+
 .ichat-settings-input:focus,
 .ichat-context-editor-input:focus,
 .ichat-context-editor-textarea:focus,

@@ -42,7 +42,8 @@ export const DEFAULT_SETTINGS: IChatSettings = {
     showHints: true
   },
   data: {
-    confirmDestructiveActions: true
+    confirmDestructiveActions: true,
+    historyMessageLimit: 6
   }
 }
 
