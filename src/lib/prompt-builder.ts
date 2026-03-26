@@ -1,4 +1,5 @@
 import type { DispatchStatus, FlowContext, FlowContextAttachmentMeta, IChatApiKeys, IChatSettings, PendingPrompt, ProviderId, ProviderThreads } from "./types"
+import { DEFAULT_FLOWCONTEXT_SYSTEM_INSTRUCTIONS } from "./flowcontext-system-instructions"
 
 export const STORAGE_KEYS = {
   flowContext: "ichat.flowContext",
@@ -16,27 +17,21 @@ export const DEFAULT_MODELS: Record<ProviderId, string> = {
   anthropic: "claude-sonnet-4-20250514"
 }
 
-export const DEFAULT_FLOWCONTEXT_SYSTEM_INSTRUCTIONS = `You are IChat, a context-native browser assistant.
-Use the captured FlowContext as the primary source of truth.
-Answer based on the captured context first, and clearly say when you are inferring.
-Start with the most relevant answer to the user's likely intent.
-Cite exact details from the captured context when available.
-Keep the response concise unless the user asks for depth.
-If image attachments are present, reason over the image and the surrounding DOM context together.
-If the context is insufficient, say what is missing and ask a focused follow-up question.`
-
 export const DEFAULT_SETTINGS: IChatSettings = {
-  schemaVersion: 2,
+  schemaVersion: 4,
+  uiLanguage: "system",
   providers: {
     active: "openai",
-    models: { ...DEFAULT_MODELS }
+    models: { ...DEFAULT_MODELS },
+    openaiEndpoint: ""
   },
   context: {
     autoSend: true,
     previewDensity: "compact",
     showLocator: true,
     showImplicitContext: true,
-    systemInstructions: DEFAULT_FLOWCONTEXT_SYSTEM_INSTRUCTIONS
+    systemInstructions: DEFAULT_FLOWCONTEXT_SYSTEM_INSTRUCTIONS,
+    systemInstructionsCustomized: false
   },
   shortcuts: {
     showHints: true

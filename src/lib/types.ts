@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai"
 
 export type ProviderId = "openai" | "gemini" | "anthropic"
+export type UiLanguage = "system" | "en" | "zh-CN"
 export type CaptureMode = "selection" | "smart-dom"
 export type CaptureStatusState = "idle" | "capturing" | "captured" | "error"
 export type DispatchStatusState = "idle" | "draft" | "sending" | "sent" | "error"
@@ -152,10 +153,12 @@ export interface FlowContext {
 }
 
 export interface IChatSettings {
-  schemaVersion: 2
+  schemaVersion: 4
+  uiLanguage: UiLanguage
   providers: {
     active: ProviderId
     models: Record<ProviderId, string>
+    openaiEndpoint: string
   }
   context: {
     autoSend: boolean
@@ -163,6 +166,7 @@ export interface IChatSettings {
     showLocator: boolean
     showImplicitContext: boolean
     systemInstructions: string
+    systemInstructionsCustomized: boolean
   }
   shortcuts: {
     showHints: boolean
@@ -174,9 +178,11 @@ export interface IChatSettings {
 }
 
 export interface IChatSettingsUpdate {
+  uiLanguage?: UiLanguage
   providers?: {
     active?: ProviderId
     models?: Partial<Record<ProviderId, string>>
+    openaiEndpoint?: string
   }
   context?: Partial<IChatSettings["context"]>
   shortcuts?: Partial<IChatSettings["shortcuts"]>

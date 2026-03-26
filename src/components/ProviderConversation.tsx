@@ -13,6 +13,7 @@ import {
   revokeObjectUrl
 } from "../lib/attachment-repository"
 import { normalizeImageBlob } from "../lib/media-processing"
+import { useI18n } from "../lib/i18n"
 import { composeFlowPrompt, dispatchStatusPayload, getFlowContextMode, getProviderModel, isAutoSendEnabled, providerLabels } from "../lib/prompt-builder"
 import { getChatThreads, setChatThread, setDispatchStatus, setFlowContext, setPendingPrompt, updateFlowContextDraft } from "../lib/storage"
 import { getVisionBlockedMessage, supportsVisionInput } from "../lib/vision-capabilities"
@@ -251,8 +252,8 @@ function snippet(value?: string | null, maxLength = 120, fallback = "-") {
   return value.length > maxLength ? `${value.slice(0, maxLength).trimEnd()}...` : value
 }
 
-function getAttachmentLabel(attachment: FlowContextAttachmentMeta, index: number) {
-  return attachment.captionText || attachment.altText || attachment.titleText || `Captured image ${index + 1}`
+function getAttachmentLabel(attachment: FlowContextAttachmentMeta, index: number, t: ReturnType<typeof useI18n>["t"]) {
+  return attachment.captionText || attachment.altText || attachment.titleText || t("chat.attachments.capturedImage", { index: index + 1 })
 }
 
 function getAttachmentUrl(attachmentId: string) {
@@ -777,26 +778,39 @@ function ResolvedAttachmentImage(props: {
 }
 
 function AttachmentPreview(props: { part: FileUIPart }) {
+  const { t } = useI18n()
   const { part } = props
 
   return (
     <ResolvedAttachmentImage
       url={part.url}
       mediaType={part.mediaType}
-      alt={part.filename || "Attached image"}
+      alt={part.filename || t("chat.message.attachedImageAlt")}
       className="ichat-message-image"
     />
   )
 }
 
 function ChatBubble({ message }: { message: UIMessage }) {
+  const { t } = useI18n()
   const text = extractUiMessageText(message)
   const role = message.role
   const fileParts = extractUiMessageFiles(message)
   const rendersMarkdown = role === "assistant"
+  const [copied, setCopied] = useState(false)
 
   if (!text && fileParts.length === 0) {
     return null
+  }
+
+  const handleCopy = async () => {
+    if (!text) {
+      return
+    }
+
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1200)
   }
 
   return (
@@ -809,6 +823,22 @@ function ChatBubble({ message }: { message: UIMessage }) {
         ) : null}
         {text ? (rendersMarkdown ? <MarkdownMessage text={text} /> : <div className="ichat-message-text">{text}</div>) : null}
       </div>
+      {text ? (
+        <div className="ichat-message-tools">
+          <button className="ichat-message-tool" type="button" aria-label={copied ? t("chat.message.copied") : t("chat.message.copy")} onClick={() => void handleCopy()}>
+            {copied ? (
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M3.75 8.25L6.5 11L12.25 5.25" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <rect x="5.25" y="3.25" width="7.5" height="9" rx="1.75" stroke="currentColor" strokeWidth="1.4" />
+                <path d="M10.25 3V2.75C10.25 1.7835 9.4665 1 8.5 1H4.75C3.7835 1 3 1.7835 3 2.75V9.25C3 10.2165 3.7835 11 4.75 11H5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+            )}
+          </button>
+        </div>
+      ) : null}
     </article>
   )
 }
@@ -818,6 +848,7 @@ function DraftContextItem(props: {
   onOpen: () => void
   onRemove: () => void
 }) {
+  const { t } = useI18n()
   const { open, onOpen, onRemove } = props
 
   return (
@@ -837,14 +868,14 @@ function DraftContextItem(props: {
           </svg>
         </span>
         <span className="ichat-context-card-copy">
-          <strong>IChat Ctx</strong>
-          <small>Open FlowContext</small>
+          <strong>{t("chat.attachments.contextTitle")}</strong>
+          <small>{t("chat.attachments.contextSubtitle")}</small>
         </span>
       </button>
       <button
         className="ichat-attachment-dismiss"
         type="button"
-        aria-label="Remove FlowContext"
+        aria-label={t("chat.attachments.removeFlowContext")}
         onClick={(event) => {
           event.stopPropagation()
           onRemove()
@@ -864,11 +895,12 @@ function ImageAttachmentCard(props: {
   onRemove?: () => void
   onPreview: () => void
 }) {
+  const { t } = useI18n()
   const { attachment, removable, onRemove, onPreview } = props
 
   return (
     <div className="ichat-image-card">
-      <button className="ichat-image-card-main" type="button" onClick={onPreview} aria-label={`Preview ${attachment.label}`}>
+      <button className="ichat-image-card-main" type="button" onClick={onPreview} aria-label={t("chat.attachments.preview", { label: attachment.label })}>
         <span className="ichat-image-card-thumb-shell" aria-hidden="true">
           <ResolvedAttachmentImage
             url={attachment.url}
@@ -879,14 +911,14 @@ function ImageAttachmentCard(props: {
         </span>
         <span className="ichat-image-card-copy">
           <strong>{attachment.filename || attachment.label}</strong>
-          <small>Click to preview</small>
+          <small>{t("chat.attachments.clickToPreview")}</small>
         </span>
       </button>
       {removable ? (
         <button
           className="ichat-attachment-dismiss"
           type="button"
-          aria-label={`Remove ${attachment.label}`}
+          aria-label={t("chat.attachments.remove", { label: attachment.label })}
           onClick={(event) => {
             event.stopPropagation()
             onRemove?.()
@@ -905,6 +937,7 @@ function ImagePreviewModal(props: {
   attachment: LocalImageAttachment
   onClose: () => void
 }) {
+  const { t } = useI18n()
   const { attachment, onClose } = props
 
   return (
@@ -913,9 +946,9 @@ function ImagePreviewModal(props: {
         className="ichat-image-modal"
         role="dialog"
         aria-modal="true"
-        aria-label={`Preview ${attachment.filename || attachment.label}`}
+        aria-label={t("chat.attachments.preview", { label: attachment.filename || attachment.label })}
         onClick={(event) => event.stopPropagation()}>
-        <button className="ichat-icon-button is-dismiss" type="button" aria-label="Close image preview" onClick={onClose}>
+        <button className="ichat-icon-button is-dismiss" type="button" aria-label={t("chat.attachments.closeImagePreview")} onClick={onClose}>
           <svg className="ichat-dismiss-icon" aria-hidden="true" viewBox="0 0 20 20" fill="none">
             <path d="M5 5L15 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             <path d="M15 5L5 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -944,6 +977,7 @@ function DraftContextModal(props: {
   onChange: (field: keyof FlowContextEditorState, value: string) => void
   onClose: () => void
 }) {
+  const { t } = useI18n()
   const { flowContext, promptPreview, pendingPrompt, editorState, readOnly, onChange, onClose } = props
   const mode = getFlowContextMode(flowContext)
 
@@ -953,9 +987,9 @@ function DraftContextModal(props: {
         className="ichat-context-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="FlowContext editor"
+        aria-label={t("chat.contextModal.ariaLabel")}
         onClick={(event) => event.stopPropagation()}>
-        <button className="ichat-icon-button is-dismiss" type="button" aria-label="Close FlowContext editor" onClick={onClose}>
+        <button className="ichat-icon-button is-dismiss" type="button" aria-label={t("chat.contextModal.close")} onClick={onClose}>
           <svg className="ichat-dismiss-icon" aria-hidden="true" viewBox="0 0 20 20" fill="none">
             <path d="M5 5L15 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             <path d="M15 5L5 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -963,21 +997,21 @@ function DraftContextModal(props: {
         </button>
         <div className="ichat-context-modal-head">
           <div>
-            <p className="ichat-eyebrow">IChat Ctx</p>
-            <h3>{flowContext.page.title || "Untitled page"}</h3>
+            <p className="ichat-eyebrow">{t("chat.attachments.contextTitle")}</p>
+            <h3>{flowContext.page.title || t("settings.context.pageUntitled")}</h3>
             <p className="ichat-subtitle">
-              Live-synced editor for the current FlowContext draft. Long fields stay scrollable so the modal height remains stable.
+              {t("chat.contextModal.subtitle")}
             </p>
           </div>
           <div className="ichat-context-modal-head-meta">
-            <span className="ichat-badge">{mode === "selection" ? "Selection + DOM" : "Smart DOM"}</span>
+            <span className="ichat-badge">{mode === "selection" ? t("chat.contextModal.mode.selection") : t("chat.contextModal.mode.smartDom")}</span>
           </div>
         </div>
 
         <div className="ichat-context-modal-scroll">
           <div className="ichat-context-editor-grid">
             <label className="ichat-context-editor-field is-full">
-              <span>URL</span>
+              <span>{t("chat.contextModal.url")}</span>
               <input
                 className="ichat-context-editor-input"
                 type="text"
@@ -988,7 +1022,7 @@ function DraftContextModal(props: {
             </label>
 
             <label className="ichat-context-editor-field is-full">
-              <span>Locator</span>
+              <span>{t("chat.contextModal.locator")}</span>
               <textarea
                 className="ichat-context-editor-textarea is-compact"
                 rows={2}
@@ -999,7 +1033,7 @@ function DraftContextModal(props: {
             </label>
 
             <label className="ichat-context-editor-field is-full">
-              <span>Selected text</span>
+              <span>{t("chat.contextModal.selectedText")}</span>
               <textarea
                 className="ichat-context-editor-textarea"
                 rows={5}
@@ -1007,11 +1041,11 @@ function DraftContextModal(props: {
                 disabled={readOnly}
                 onChange={(event) => onChange("selectedText", event.target.value)}
               />
-              <small>{snippet(editorState.selectedText, 96, "Empty")}</small>
+              <small>{snippet(editorState.selectedText, 96, t("common.empty"))}</small>
             </label>
 
             <label className="ichat-context-editor-field">
-              <span>Smart target</span>
+              <span>{t("chat.contextModal.smartTarget")}</span>
               <textarea
                 className="ichat-context-editor-textarea"
                 rows={5}
@@ -1019,11 +1053,11 @@ function DraftContextModal(props: {
                 disabled={readOnly}
                 onChange={(event) => onChange("smartTargetText", event.target.value)}
               />
-              <small>{snippet(editorState.smartTargetText, 96, "Empty")}</small>
+              <small>{snippet(editorState.smartTargetText, 96, t("common.empty"))}</small>
             </label>
 
             <label className="ichat-context-editor-field">
-              <span>Implicit context</span>
+              <span>{t("chat.contextModal.implicitContext")}</span>
               <textarea
                 className="ichat-context-editor-textarea"
                 rows={5}
@@ -1031,12 +1065,12 @@ function DraftContextModal(props: {
                 disabled={readOnly}
                 onChange={(event) => onChange("implicitContextText", event.target.value)}
               />
-              <small>{snippet(editorState.implicitContextText, 96, "Empty")}</small>
+              <small>{snippet(editorState.implicitContextText, 96, t("common.empty"))}</small>
             </label>
           </div>
 
           <div className="ichat-prompt-preview is-modal-preview">
-            <span>Prompt preview</span>
+            <span>{t("chat.contextModal.promptPreview")}</span>
             <pre>{promptPreview}</pre>
           </div>
 
@@ -1048,6 +1082,7 @@ function DraftContextModal(props: {
 }
 
 export function ProviderConversation({ provider, settings, apiKeys, pendingPrompt, flowContext, threadClearSignal }: ProviderConversationProps) {
+  const { t } = useI18n()
   const currentModel = getProviderModel(settings, provider)
   const currentKey = getProviderKey(provider, apiKeys)
   const [hydrated, setHydrated] = useState(false)
@@ -1103,11 +1138,11 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
         id: attachment.id,
         mediaType: attachment.normalizedMimeType || attachment.mimeType || "image/png",
         filename: attachment.filename || undefined,
-        label: getAttachmentLabel(attachment, index),
+        label: getAttachmentLabel(attachment, index, t),
         url: getAttachmentUrl(attachment.id),
         source: "flow-context"
       }))
-  }, [attachmentFlowContext])
+  }, [attachmentFlowContext, t])
 
   const liveEditedFlowContext = useMemo(() => {
     if (!attachmentFlowContext) {
@@ -1131,7 +1166,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
 
   const allActiveAttachments = useMemo(() => [...contextImageAttachments, ...composerAttachments], [composerAttachments, contextImageAttachments])
   const visionBlocked = allActiveAttachments.length > 0 && !supportsVisionInput(provider, currentModel)
-  const visionBlockedMessage = getVisionBlockedMessage(provider, currentModel)
+  const visionBlockedMessage = getVisionBlockedMessage(provider, currentModel, t)
 
   useEffect(() => {
     messagesRef.current = messages
@@ -1376,9 +1411,9 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
     await Promise.all([
       setFlowContext(null),
       setPendingPrompt(null),
-      setDispatchStatus(dispatchStatusPayload("idle", "Cleared the current FlowContext draft", provider, null))
+      setDispatchStatus(dispatchStatusPayload("idle", t("state.clearedContext"), provider, null))
     ])
-  }, [provider])
+  }, [provider, t])
 
   const removeComposerAttachment = useCallback((attachmentId: string) => {
     if (previewAttachment?.id === attachmentId) {
@@ -1409,7 +1444,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
       }
 
       if (hasImageParts && !supportsVisionInput(provider, currentModel)) {
-        const message = getVisionBlockedMessage(provider, currentModel)
+        const message = getVisionBlockedMessage(provider, currentModel, t)
         setErrorBanner(message)
         await setDispatchStatus(dispatchStatusPayload("error", message, provider, pending?.flowContextId ?? null))
 
@@ -1425,7 +1460,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
       }
 
       if (!currentKey) {
-        const message = `Missing ${providerLabels[provider]} API key. Add it in Settings before sending.`
+        const message = t("errors.missingApiKey", { providerLabel: providerLabels[provider] })
         setErrorBanner(message)
         await setDispatchStatus(dispatchStatusPayload("error", message, provider, pending?.flowContextId ?? null))
 
@@ -1463,7 +1498,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
           error: null
         })
         await setDispatchStatus(
-          dispatchStatusPayload("sending", `Sending FlowContext to ${providerLabels[provider]}`, provider, pending.flowContextId)
+          dispatchStatusPayload("sending", t("state.sendingContext", { providerLabel: providerLabels[provider] }), provider, pending.flowContextId)
         )
       }
 
@@ -1475,7 +1510,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
           setMessages(streamedMessages)
         })
 
-        const finalText = responseText || "No response returned."
+        const finalText = responseText || t("errors.noResponseReturned")
         const finalMessages = replaceMessageText(messagesRef.current, assistantMessageId, finalText)
         messagesRef.current = finalMessages
         setMessages(finalMessages)
@@ -1483,14 +1518,14 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
         if (pending) {
           await setPendingPrompt(null)
           await setDispatchStatus(
-            dispatchStatusPayload("sent", `FlowContext sent to ${providerLabels[provider]}`, provider, pending.flowContextId)
+            dispatchStatusPayload("sent", t("state.sentContext", { providerLabel: providerLabels[provider] }), provider, pending.flowContextId)
           )
         }
 
         return true
       } catch (error) {
         const cancelled = controller.signal.aborted || (error instanceof Error && error.name === "AbortError")
-        const message = cancelled ? "Request cancelled." : formatProviderError(provider, currentModel, currentKey, error)
+        const message = cancelled ? t("errors.requestCancelled") : formatProviderError(provider, currentModel, currentKey, error, t)
         const currentAssistant = messagesRef.current.find((entry) => entry.id === assistantMessageId)
         const hasPartialAssistantText = Boolean(currentAssistant && extractUiMessageText(currentAssistant))
 
@@ -1530,7 +1565,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
         setIsBusy(false)
       }
     },
-    [apiKeys, currentKey, currentModel, provider, settings]
+    [apiKeys, currentKey, currentModel, provider, settings, t]
   )
 
   useEffect(() => {
@@ -1552,7 +1587,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
         id: attachment.id,
         mediaType: attachment.normalizedMimeType || attachment.mimeType || "image/png",
         filename: attachment.filename || undefined,
-        label: getAttachmentLabel(attachment, index),
+        label: getAttachmentLabel(attachment, index, t),
         url: getAttachmentUrl(attachment.id),
         source: "flow-context" as const
       }))
@@ -1564,7 +1599,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
       pendingPrompt.prompt,
       buildFilePartsForAttachments(pendingAttachments)
     )
-  }, [buildFilePartsForAttachments, flowContext, hydrated, pendingPrompt, provider, runSendPipeline])
+  }, [buildFilePartsForAttachments, flowContext, hydrated, pendingPrompt, provider, runSendPipeline, t])
 
   const handleEditorChange = useCallback((field: keyof FlowContextEditorState, value: string) => {
     setEditorState((current) => {
@@ -1667,28 +1702,28 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
     <div className="ichat-conversation-shell">
       {missingKey ? (
         <div className="ichat-banner is-warning">
-          Add a {providerLabels[provider]} API key in Settings to start chatting.
+          {t("chat.banner.missingApiKey", { providerLabel: providerLabels[provider] })}
         </div>
       ) : null}
 
       {!missingKey && activeBanner ? <div className="ichat-banner is-warning">{activeBanner}</div> : null}
 
       <div className="ichat-thread-root">
-        <div ref={viewportRef} className="ichat-thread-viewport">
-          <div ref={threadContentRef}>
+          <div ref={viewportRef} className="ichat-thread-viewport">
+          <div ref={threadContentRef} className="ichat-thread-stack">
             {!hydrated ? (
               <div className="ichat-thread-empty">
-                <p className="ichat-empty-kicker">Loading</p>
-                <h2>Preparing your conversation</h2>
+                <p className="ichat-empty-kicker">{t("chat.loading.kicker")}</p>
+                <h2>{t("chat.loading.heading")}</h2>
               </div>
             ) : null}
 
             {hydrated && messages.length === 0 ? (
               <div className="ichat-thread-empty">
-                <p className="ichat-empty-kicker">IChat Native Chat</p>
-                <h2>Context stays here, not in your clipboard</h2>
+                <p className="ichat-empty-kicker">{t("chat.empty.kicker")}</p>
+                <h2>{t("chat.empty.heading")}</h2>
                 <p>
-                  Capture page context, review the generated prompt, and keep chatting with {providerLabels[provider]} using <code>{currentModel}</code>.
+                  {t("chat.empty.description", { providerLabel: providerLabels[provider], modelId: currentModel })}
                 </p>
               </div>
             ) : null}
@@ -1733,7 +1768,13 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
           className="ichat-composer-input"
           rows={3}
           value={composerText}
-          placeholder={attachmentPrompt ? "Ask with the attached FlowContext..." : composerAttachments.length ? "Add a prompt for the attached image..." : "Ask a follow-up or type directly here..."}
+          placeholder={
+            attachmentPrompt
+              ? t("chat.composer.placeholder.withContext")
+              : composerAttachments.length
+                ? t("chat.composer.placeholder.withImages")
+                : t("chat.composer.placeholder.default")
+          }
           onChange={(event) => setComposerText(event.target.value)}
           onPaste={(event) => void handleComposerPaste(event)}
           onKeyDown={(event) => {
@@ -1745,10 +1786,10 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
         />
         <div className="ichat-composer-actions">
           <button className="ichat-secondary-button" type="button" onClick={handleStop} disabled={!isBusy}>
-            Stop
+            {t("chat.composer.stop")}
           </button>
           <button className="ichat-primary-button" type="button" onClick={() => void handleComposerSubmit()} disabled={!canSubmit}>
-            {isBusy ? "Sending..." : allActiveAttachments.length > 0 ? "Send with images" : attachmentPrompt ? "Send with context" : "Send"}
+            {isBusy ? t("chat.composer.sending") : allActiveAttachments.length > 0 ? t("chat.composer.sendWithImages") : attachmentPrompt ? t("chat.composer.sendWithContext") : t("chat.composer.send")}
           </button>
         </div>
       </div>

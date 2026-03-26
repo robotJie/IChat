@@ -20,6 +20,7 @@ import {
   updateApiKeys,
   updateSettings
 } from "../lib/storage"
+import { createI18n, I18nProvider, resolveLocale } from "../lib/i18n"
 import type { AppState, IChatSettingsUpdate, ProviderId } from "../lib/types"
 import { getVisionBlockedMessage, supportsVisionInput } from "../lib/vision-capabilities"
 import { ProviderConversation } from "./ProviderConversation"
@@ -66,6 +67,9 @@ export function IChatApp({ viewMode }: IChatAppProps) {
   const deferredFlowContext = useDeferredValue(appState.flowContext)
   const gearButtonRef = useRef<HTMLButtonElement | null>(null)
   const wasSettingsOpenRef = useRef(false)
+  const locale = resolveLocale(appState.settings)
+  const i18n = useMemo(() => createI18n(locale), [locale])
+  const { t } = i18n
 
   const promptPreview = useMemo(() => {
     if (!deferredFlowContext) {
@@ -186,6 +190,14 @@ export function IChatApp({ viewMode }: IChatAppProps) {
     })
   }
 
+  const handleOpenAIEndpointChange = async (value: string) => {
+    await updateSettings({
+      providers: {
+        openaiEndpoint: value
+      }
+    })
+  }
+
   const handleApiKeyChange = async (provider: ProviderId, value: string) => {
     await updateApiKeys({ [provider]: value })
   }
@@ -200,6 +212,15 @@ export function IChatApp({ viewMode }: IChatAppProps) {
     }
 
     await navigator.clipboard.writeText(promptPreview)
+  }
+
+  const handleCopySystemInstructions = async () => {
+    const systemInstructions = appState.settings.context.systemInstructions
+    if (!systemInstructions) {
+      return
+    }
+
+    await navigator.clipboard.writeText(systemInstructions)
   }
 
   const handleSendCurrentContext = async () => {
@@ -227,7 +248,7 @@ export function IChatApp({ viewMode }: IChatAppProps) {
 
     const currentModel = getProviderModel(appState.settings, activeProvider)
     if (pendingPrompt.requiresVision && !supportsVisionInput(activeProvider, currentModel)) {
-      const blockedMessage = getVisionBlockedMessage(activeProvider, currentModel)
+      const blockedMessage = getVisionBlockedMessage(activeProvider, currentModel, t)
       await setPendingPrompt({
         ...pendingPrompt,
         status: "draft",
@@ -239,7 +260,7 @@ export function IChatApp({ viewMode }: IChatAppProps) {
 
     await setPendingPrompt(pendingPrompt)
     await setDispatchStatus(
-      dispatchStatusPayload("sending", `Sending FlowContext to ${providerLabels[activeProvider]}`, activeProvider, appState.flowContext.id)
+      dispatchStatusPayload("sending", t("state.sendingContext", { providerLabel: providerLabels[activeProvider] }), activeProvider, appState.flowContext.id)
     )
   }
 
@@ -252,7 +273,7 @@ export function IChatApp({ viewMode }: IChatAppProps) {
   }
 
   const handleClearThread = async () => {
-    const confirmed = await confirmDangerousAction(`Clear the stored ${providerLabels[activeProvider]} conversation?`)
+    const confirmed = await confirmDangerousAction(t("confirm.clearThread", { providerLabel: providerLabels[activeProvider] }))
     if (!confirmed) {
       return
     }
@@ -262,11 +283,11 @@ export function IChatApp({ viewMode }: IChatAppProps) {
       ...current,
       [activeProvider]: current[activeProvider] + 1
     }))
-    await setDispatchStatus(dispatchStatusPayload("idle", `Cleared ${providerLabels[activeProvider]} conversation`, activeProvider, null))
+    await setDispatchStatus(dispatchStatusPayload("idle", t("state.clearedConversation", { providerLabel: providerLabels[activeProvider] }), activeProvider, null))
   }
 
   const handleResetContext = async () => {
-    const confirmed = await confirmDangerousAction("Reset the current FlowContext draft and pending prompt?")
+    const confirmed = await confirmDangerousAction(t("confirm.resetContext"))
     if (!confirmed) {
       return
     }
@@ -274,56 +295,60 @@ export function IChatApp({ viewMode }: IChatAppProps) {
     await Promise.all([
       setFlowContext(null),
       setPendingPrompt(null),
-      setDispatchStatus(dispatchStatusPayload("idle", "Cleared the current FlowContext draft", activeProvider, null))
+      setDispatchStatus(dispatchStatusPayload("idle", t("state.clearedContext"), activeProvider, null))
     ])
   }
 
   return (
-    <div className={`ichat-app view-${viewMode}`}>
-      <div className="ichat-shell">
-        <header className="ichat-header is-minimal">
-          <div className="ichat-brand" aria-hidden="true">
-            <IChatLogotype className="ichat-brand-mark" title="IChat" variant="wordmark" />
-          </div>
-          <button className="ichat-icon-button is-gear" ref={gearButtonRef} type="button" aria-label="Open settings" onClick={() => setSettingsOpen(true)}>
-            <svg className="ichat-gear-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none">
-              <path d="M12 8.75A3.25 3.25 0 1 0 12 15.25A3.25 3.25 0 1 0 12 8.75Z" stroke="currentColor" strokeWidth="1.7" />
-              <path d="M19.4 13.5V10.5L17.36 9.82C17.19 9.25 16.96 8.71 16.66 8.2L17.62 6.25L15.5 4.13L13.55 5.09C13.04 4.79 12.5 4.56 11.93 4.39L11.25 2.35H8.25L7.57 4.39C7 4.56 6.46 4.79 5.95 5.09L4 4.13L1.88 6.25L2.84 8.2C2.54 8.71 2.31 9.25 2.14 9.82L0.1 10.5V13.5L2.14 14.18C2.31 14.75 2.54 15.29 2.84 15.8L1.88 17.75L4 19.87L5.95 18.91C6.46 19.21 7 19.44 7.57 19.61L8.25 21.65H11.25L11.93 19.61C12.5 19.44 13.04 19.21 13.55 18.91L15.5 19.87L17.62 17.75L16.66 15.8C16.96 15.29 17.19 14.75 17.36 14.18L19.4 13.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </header>
+    <I18nProvider value={i18n}>
+      <div className={`ichat-app view-${viewMode}`}>
+        <div className="ichat-shell">
+          <header className="ichat-header is-minimal">
+            <div className="ichat-brand" aria-hidden="true">
+              <IChatLogotype className="ichat-brand-mark" title="IChat" variant="wordmark" />
+            </div>
+            <button className="ichat-icon-button is-gear" ref={gearButtonRef} type="button" aria-label={t("common.settings")} onClick={() => setSettingsOpen(true)}>
+              <svg className="ichat-gear-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                <path d="M12 8.75A3.25 3.25 0 1 0 12 15.25A3.25 3.25 0 1 0 12 8.75Z" stroke="currentColor" strokeWidth="1.7" />
+                <path d="M19.4 13.5V10.5L17.36 9.82C17.19 9.25 16.96 8.71 16.66 8.2L17.62 6.25L15.5 4.13L13.55 5.09C13.04 4.79 12.5 4.56 11.93 4.39L11.25 2.35H8.25L7.57 4.39C7 4.56 6.46 4.79 5.95 5.09L4 4.13L1.88 6.25L2.84 8.2C2.54 8.71 2.31 9.25 2.14 9.82L0.1 10.5V13.5L2.14 14.18C2.31 14.75 2.54 15.29 2.84 15.8L1.88 17.75L4 19.87L5.95 18.91C6.46 19.21 7 19.44 7.57 19.61L8.25 21.65H11.25L11.93 19.61C12.5 19.44 13.04 19.21 13.55 18.91L15.5 19.87L17.62 17.75L16.66 15.8C16.96 15.29 17.19 14.75 17.36 14.18L19.4 13.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </header>
 
-        <ProviderConversation
-          key={activeProvider}
-          provider={activeProvider}
-          settings={appState.settings}
-          apiKeys={appState.apiKeys}
-          pendingPrompt={appState.pendingPrompt}
-          flowContext={appState.flowContext}
-          threadClearSignal={threadClearSignals[activeProvider]}
-        />
+          <ProviderConversation
+            key={activeProvider}
+            provider={activeProvider}
+            settings={appState.settings}
+            apiKeys={appState.apiKeys}
+            pendingPrompt={appState.pendingPrompt}
+            flowContext={appState.flowContext}
+            threadClearSignal={threadClearSignals[activeProvider]}
+          />
+        </div>
+
+        {settingsOpen ? (
+          <SettingsWorkspace
+            appState={appState}
+            promptPreview={promptPreview}
+            pendingState={pendingState}
+            viewMode={viewMode}
+            onClose={() => setSettingsOpen(false)}
+            onTriggerCapture={() => void triggerCapture()}
+            onOpenDetachedTab={() => void openDetachedTab()}
+            onProviderChange={(provider) => void handleProviderChange(provider)}
+            onModelChange={(provider, model) => void handleModelChange(provider, model)}
+            onApiKeyChange={(provider, value) => void handleApiKeyChange(provider, value)}
+            onOpenAIEndpointChange={(value) => void handleOpenAIEndpointChange(value)}
+            onSettingsChange={(partial) => void handleSettingsChange(partial)}
+            onCopyPrompt={() => void handleCopyPrompt()}
+            onCopySystemInstructions={() => void handleCopySystemInstructions()}
+            onSendCurrentContext={() => void handleSendCurrentContext()}
+            onClearThread={() => void handleClearThread()}
+            onResetContext={() => void handleResetContext()}
+          />
+        ) : null}
       </div>
-
-      {settingsOpen ? (
-        <SettingsWorkspace
-          appState={appState}
-          promptPreview={promptPreview}
-          pendingState={pendingState}
-          viewMode={viewMode}
-          onClose={() => setSettingsOpen(false)}
-          onTriggerCapture={() => void triggerCapture()}
-          onOpenDetachedTab={() => void openDetachedTab()}
-          onProviderChange={(provider) => void handleProviderChange(provider)}
-          onModelChange={(provider, model) => void handleModelChange(provider, model)}
-          onApiKeyChange={(provider, value) => void handleApiKeyChange(provider, value)}
-          onSettingsChange={(partial) => void handleSettingsChange(partial)}
-          onCopyPrompt={() => void handleCopyPrompt()}
-          onSendCurrentContext={() => void handleSendCurrentContext()}
-          onClearThread={() => void handleClearThread()}
-          onResetContext={() => void handleResetContext()}
-        />
-      ) : null}
-    </div>
+    </I18nProvider>
   )
 }
 

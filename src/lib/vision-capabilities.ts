@@ -1,3 +1,4 @@
+import type { TranslateFn } from "./i18n"
 import type { IChatSettings, ProviderId } from "./types"
 import { getActiveProvider, getProviderModel, providerLabels } from "./prompt-builder"
 
@@ -22,7 +23,9 @@ export function currentModelSupportsVision(settings: IChatSettings) {
   return supportsVisionInput(provider, modelId)
 }
 
-export function getVisionBlockedMessage(provider: ProviderId, modelId: string) {
+export function getVisionBlockedMessage(provider: ProviderId, modelId: string, t?: TranslateFn) {
   const label = providerLabels[provider]
-  return `${label} model '${modelId}' does not appear to support image input. Switch to a vision-capable model or remove the image attachment.`
+  return t
+    ? t("errors.visionBlocked", { providerLabel: label, modelId })
+    : `${label} model '${modelId}' does not appear to support image input. Switch to a vision-capable model or remove the image attachment.`
 }

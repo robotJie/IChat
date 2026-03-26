@@ -129,7 +129,7 @@ a:focus-visible {
 
 .ichat-brand-mark {
   display: block;
-  width: 100px;
+  width: 88px;
   height: auto;
   flex: 0 0 auto;
 }
@@ -999,11 +999,13 @@ a:focus-visible {
 
 .ichat-message {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
 }
 
 .ichat-message.is-user {
   justify-content: flex-end;
+  align-items: flex-end;
 }
 
 .ichat-bubble {
@@ -1016,6 +1018,59 @@ a:focus-visible {
 
 .ichat-message.is-user .ichat-bubble {
   background: #2a313b;
+}
+
+.ichat-thread-stack {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 6px;
+}
+
+.ichat-message-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 0 6px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.ichat-message:hover .ichat-message-tools,
+.ichat-message:focus-within .ichat-message-tools {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.ichat-message-tool {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(20, 22, 25, 0.96);
+  color: rgba(239, 242, 247, 0.9);
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+  transition: border-color 160ms ease, color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.ichat-message-tool:hover,
+.ichat-message-tool:focus-visible {
+  border-color: rgba(159, 195, 255, 0.72);
+  color: var(--ichat-accent-strong);
+  background: rgba(25, 30, 38, 0.98);
+  transform: translateY(-1px);
+}
+
+.ichat-message-tool svg {
+  width: 15px;
+  height: 15px;
 }
 
 .ichat-composer-shell {

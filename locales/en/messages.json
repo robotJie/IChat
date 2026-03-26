@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "IChat"
+  },
+  "extDescription": {
+    "message": "Context-aware side panel chat for the web."
+  },
+  "actionTitle": {
+    "message": "IChat"
+  },
+  "captureCommandDescription": {
+    "message": "Capture page context into IChat"
+  }
+}

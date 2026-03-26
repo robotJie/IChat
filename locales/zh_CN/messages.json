@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "IChat"
+  },
+  "extDescription": {
+    "message": "面向网页的上下文感知侧边栏聊天。"
+  },
+  "actionTitle": {
+    "message": "IChat"
+  },
+  "captureCommandDescription": {
+    "message": "将页面上下文捕获到 IChat"
+  }
+}

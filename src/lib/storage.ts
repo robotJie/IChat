@@ -1,5 +1,9 @@
 import { Storage } from "@plasmohq/storage"
 import type { UIMessage } from "ai"
+import {
+  getDefaultFlowContextSystemInstructionsForSettings,
+  isDefaultFlowContextSystemInstructions
+} from "./flowcontext-system-instructions"
 import type {
   AppState,
   CaptureStatus,
@@ -13,7 +17,8 @@ import type {
   PendingPrompt,
   ProviderId,
   ProviderThreads,
-  RectDescriptor
+  RectDescriptor,
+  UiLanguage
 } from "./types"
 import {
   captureStatusPayload,
@@ -42,6 +47,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isProvider(value: unknown): value is ProviderId {
   return value === "openai" || value === "gemini" || value === "anthropic"
+}
+
+function isUiLanguage(value: unknown): value is UiLanguage {
+  return value === "system" || value === "en" || value === "zh-CN"
 }
 
 function normalizeRect(value: unknown): RectDescriptor | null {
@@ -285,6 +294,14 @@ export function normalizeSettings(value: unknown): IChatSettings {
     : isProvider(settings.provider)
       ? settings.provider
       : DEFAULT_SETTINGS.providers.active
+  const uiLanguage = isUiLanguage(settings.uiLanguage)
+    ? settings.uiLanguage
+    : DEFAULT_SETTINGS.uiLanguage
+  const openaiEndpoint = typeof providers.openaiEndpoint === "string"
+    ? providers.openaiEndpoint.trim()
+    : typeof settings.openaiEndpoint === "string"
+      ? settings.openaiEndpoint.trim()
+      : DEFAULT_SETTINGS.providers.openaiEndpoint
 
   const autoSend = typeof context.autoSend === "boolean"
     ? context.autoSend
@@ -295,19 +312,29 @@ export function normalizeSettings(value: unknown): IChatSettings {
   const previewDensity = context.previewDensity === "full" || context.previewDensity === "compact"
     ? context.previewDensity
     : DEFAULT_SETTINGS.context.previewDensity
-  const systemInstructions = typeof context.systemInstructions === "string"
+  const explicitSystemInstructions = typeof context.systemInstructions === "string"
     ? context.systemInstructions
-    : DEFAULT_SETTINGS.context.systemInstructions
+    : null
+  const systemInstructionsCustomized = typeof context.systemInstructionsCustomized === "boolean"
+    ? context.systemInstructionsCustomized
+    : explicitSystemInstructions === null
+      ? false
+      : !isDefaultFlowContextSystemInstructions(explicitSystemInstructions)
+  const systemInstructions = systemInstructionsCustomized
+    ? explicitSystemInstructions ?? DEFAULT_SETTINGS.context.systemInstructions
+    : getDefaultFlowContextSystemInstructionsForSettings({ uiLanguage })
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 4,
+    uiLanguage,
     providers: {
       active: activeProvider,
       models: {
         openai: normalizeModelId("openai", nestedModels.openai ?? legacyModels.openai),
         gemini: normalizeModelId("gemini", nestedModels.gemini ?? legacyModels.gemini),
         anthropic: normalizeModelId("anthropic", nestedModels.anthropic ?? legacyModels.anthropic)
-      }
+      },
+      openaiEndpoint
     },
     context: {
       autoSend,
@@ -317,7 +344,8 @@ export function normalizeSettings(value: unknown): IChatSettings {
         typeof context.showImplicitContext === "boolean"
           ? context.showImplicitContext
           : DEFAULT_SETTINGS.context.showImplicitContext,
-      systemInstructions
+      systemInstructions,
+      systemInstructionsCustomized
     },
     shortcuts: {
       showHints: typeof shortcuts.showHints === "boolean" ? shortcuts.showHints : DEFAULT_SETTINGS.shortcuts.showHints
@@ -485,7 +513,8 @@ function shouldPatch(original: unknown, normalized: unknown) {
 function mergeSettings(current: IChatSettings, partial: IChatSettingsUpdate): IChatSettings {
   return normalizeSettings({
     ...current,
-    schemaVersion: 2,
+    schemaVersion: 4,
+    uiLanguage: partial.uiLanguage ?? current.uiLanguage,
     providers: {
       ...current.providers,
       ...(partial.providers ?? {}),

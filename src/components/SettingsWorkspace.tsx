@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { ReactNode } from "react"
-import { DEFAULT_FLOWCONTEXT_SYSTEM_INSTRUCTIONS, getActiveProvider, getFlowContextMode, getProviderModel, isAutoSendEnabled, providerLabels } from "../lib/prompt-builder"
-import type { AppState, FlowContext, IChatSettingsUpdate, ProviderId } from "../lib/types"
+import { getActiveProvider, getFlowContextMode, getProviderModel, isAutoSendEnabled, providerLabels } from "../lib/prompt-builder"
+import { useI18n } from "../lib/i18n"
+import type { AppState, FlowContext, IChatSettingsUpdate, ProviderId, UiLanguage } from "../lib/types"
 
 interface SettingsWorkspaceProps {
   appState: AppState
@@ -14,8 +15,10 @@ interface SettingsWorkspaceProps {
   onProviderChange: (provider: ProviderId) => void | Promise<void>
   onModelChange: (provider: ProviderId, model: string) => void | Promise<void>
   onApiKeyChange: (provider: ProviderId, value: string) => void | Promise<void>
+  onOpenAIEndpointChange: (value: string) => void | Promise<void>
   onSettingsChange: (partial: IChatSettingsUpdate) => void | Promise<void>
   onCopyPrompt: () => void | Promise<void>
+  onCopySystemInstructions: () => void | Promise<void>
   onSendCurrentContext: () => void | Promise<void>
   onClearThread: () => void | Promise<void>
   onResetContext: () => void | Promise<void>
@@ -29,33 +32,57 @@ interface CommandBindingSummary {
   shortcut: string
 }
 
-const SETTINGS_SECTIONS: Array<{ id: SettingsSectionId; label: string; description: string }> = [
-  { id: "general", label: "General", description: "Manage local safety prompts and stored chat data." },
-  { id: "providers", label: "LLM Providers", description: "Choose the active model provider and manage BYOK settings." },
-  { id: "context", label: "FlowContext", description: "Review FlowContext, prompt preview, and capture behavior." },
-  { id: "shortcuts", label: "Shortcuts", description: "See the current capture keybinding and open Chrome shortcut settings." }
+const LANGUAGE_OPTIONS: Array<{ value: UiLanguage; labelKey: "settings.general.language.system" | "settings.general.language.en" | "settings.general.language.zhCN" }> = [
+  { value: "system", labelKey: "settings.general.language.system" },
+  { value: "en", labelKey: "settings.general.language.en" },
+  { value: "zh-CN", labelKey: "settings.general.language.zhCN" }
 ]
 
 const PROVIDERS: ProviderId[] = ["openai", "gemini", "anthropic"]
 
-const PROVIDER_HELP: Record<ProviderId, { keyLabel: string; keyPlaceholder: string; modelLabel: string; note: string }> = {
-  openai: {
-    keyLabel: "API key",
-    keyPlaceholder: "sk-...",
-    modelLabel: "Model ID",
-    note: "Good default for balanced chat. Use any OpenAI-compatible chat model ID supported by your key."
-  },
-  gemini: {
-    keyLabel: "AI Studio key",
-    keyPlaceholder: "AIza...",
-    modelLabel: "Model ID",
-    note: "Uses Google AI Studio keys. If requests fail with identity errors, verify the key really belongs to Gemini."
-  },
-  anthropic: {
-    keyLabel: "API key",
-    keyPlaceholder: "sk-ant-...",
-    modelLabel: "Model ID",
-    note: "Claude models work well for reasoning-heavy follow-ups. Keep the model ID aligned with your account access."
+function getSettingsSections(t: ReturnType<typeof useI18n>["t"]): Array<{ id: SettingsSectionId; label: string; description: string }> {
+  return [
+    { id: "general", label: t("settings.sections.general.label"), description: t("settings.sections.general.description") },
+    { id: "providers", label: t("settings.sections.providers.label"), description: t("settings.sections.providers.description") },
+    { id: "context", label: t("settings.sections.context.label"), description: t("settings.sections.context.description") },
+    { id: "shortcuts", label: t("settings.sections.shortcuts.label"), description: t("settings.sections.shortcuts.description") }
+  ]
+}
+
+function getProviderHelp(t: ReturnType<typeof useI18n>["t"]): Record<
+  ProviderId,
+  {
+    keyLabel: string
+    keyPlaceholder: string
+    modelLabel: string
+    note: string
+    endpointLabel?: string
+    endpointPlaceholder?: string
+    endpointNote?: string
+  }
+> {
+  return {
+    openai: {
+      keyLabel: t("settings.providers.openai.keyLabel"),
+      keyPlaceholder: "sk-...",
+      modelLabel: t("settings.providers.openai.modelLabel"),
+      note: t("settings.providers.openai.note"),
+      endpointLabel: t("settings.providers.openai.endpointLabel"),
+      endpointPlaceholder: "https://api.openai.com/v1",
+      endpointNote: t("settings.providers.openai.endpointNote")
+    },
+    gemini: {
+      keyLabel: t("settings.providers.gemini.keyLabel"),
+      keyPlaceholder: "AIza...",
+      modelLabel: t("settings.providers.gemini.modelLabel"),
+      note: t("settings.providers.gemini.note")
+    },
+    anthropic: {
+      keyLabel: t("settings.providers.anthropic.keyLabel"),
+      keyPlaceholder: "sk-ant-...",
+      modelLabel: t("settings.providers.anthropic.modelLabel"),
+      note: t("settings.providers.anthropic.note")
+    }
   }
 }
 
@@ -75,30 +102,34 @@ function clampHistoryMessageLimit(value: number) {
   return Math.min(100, Math.max(0, Math.trunc(value)))
 }
 
-function formatSmartTargetPreview(flowContext: FlowContext, maxLength: number) {
+function formatSmartTargetPreview(flowContext: FlowContext, maxLength: number, t: ReturnType<typeof useI18n>["t"]) {
   const target = flowContext.smartTarget
   if (!target) {
-    return "No smart DOM target"
+    return t("settings.context.noSmartDomTarget")
   }
 
   if (target.text?.trim()) {
-    return snippet(target.text, maxLength, "No smart DOM target")
+    return snippet(target.text, maxLength, t("settings.context.noSmartDomTarget"))
   }
 
   if (target.kind === "image") {
-    return target.sourceUrl ? snippet(target.sourceUrl, maxLength, "Captured image target") : "Captured image target"
+    return target.sourceUrl
+      ? snippet(target.sourceUrl, maxLength, t("settings.context.capturedImageTarget"))
+      : t("settings.context.capturedImageTarget")
   }
 
   if (target.kind === "video") {
-    return target.sourceUrl ? snippet(target.sourceUrl, maxLength, "Captured video target") : "Captured video target"
+    return target.sourceUrl
+      ? snippet(target.sourceUrl, maxLength, t("settings.context.capturedVideoTarget"))
+      : t("settings.context.capturedVideoTarget")
   }
 
-  return "No smart DOM target"
+  return t("settings.context.noSmartDomTarget")
 }
 
-function formatAttachmentPreview(flowContext: FlowContext, maxLength: number) {
+function formatAttachmentPreview(flowContext: FlowContext, maxLength: number, t: ReturnType<typeof useI18n>["t"]) {
   if (!flowContext.attachments.length) {
-    return "No attachments"
+    return t("settings.context.noAttachments")
   }
 
   return flowContext.attachments
@@ -137,6 +168,30 @@ function getFocusableElements(container: HTMLElement) {
       'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
     )
   ).filter((element) => !element.hasAttribute("aria-hidden"))
+}
+
+function formatPendingStateLabel(pendingState: string | null, t: ReturnType<typeof useI18n>["t"]) {
+  if (pendingState === "draft") {
+    return t("settings.context.summary.state.draft")
+  }
+
+  if (pendingState === "pending") {
+    return t("settings.context.summary.state.pending")
+  }
+
+  if (pendingState === "processing") {
+    return t("settings.context.summary.state.processing")
+  }
+
+  if (pendingState === "sent") {
+    return t("settings.context.summary.state.sent")
+  }
+
+  if (pendingState === "error") {
+    return t("settings.context.summary.state.error")
+  }
+
+  return t("settings.context.summary.draftNotCreated")
 }
 
 function SettingsSectionHeader(props: { title: string; description: string }) {
@@ -217,12 +272,15 @@ function ProviderCard(props: {
   onToggle: () => void
   apiKey: string
   modelId: string
+  openaiEndpoint: string
   onProviderChange: (provider: ProviderId) => void | Promise<void>
   onModelChange: (provider: ProviderId, model: string) => void | Promise<void>
   onApiKeyChange: (provider: ProviderId, value: string) => void | Promise<void>
+  onOpenAIEndpointChange: (value: string) => void | Promise<void>
 }) {
-  const { provider, activeProvider, expanded, onToggle, apiKey, modelId, onProviderChange, onModelChange, onApiKeyChange } = props
-  const help = PROVIDER_HELP[provider]
+  const { t } = useI18n()
+  const { provider, activeProvider, expanded, onToggle, apiKey, modelId, openaiEndpoint, onProviderChange, onModelChange, onApiKeyChange, onOpenAIEndpointChange } = props
+  const help = getProviderHelp(t)[provider]
   const isActive = provider === activeProvider
 
   return (
@@ -231,7 +289,7 @@ function ProviderCard(props: {
         <div className="ichat-settings-provider-title-row">
           <h3>{providerLabels[provider]}</h3>
           <div className="ichat-settings-provider-meta">
-            {isActive ? <span className="ichat-settings-provider-badge">Active</span> : null}
+            {isActive ? <span className="ichat-settings-provider-badge">{t("settings.providers.active")}</span> : null}
             <svg className="ichat-settings-provider-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none">
               <path d="M6 8L10 12L14 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -244,7 +302,7 @@ function ProviderCard(props: {
           <div className="ichat-settings-provider-head">
             <p>{help.note}</p>
             <button className={`ichat-secondary-button ${isActive ? "is-selected" : ""}`} type="button" onClick={() => void onProviderChange(provider)}>
-              {isActive ? "Active" : "Use provider"}
+              {isActive ? t("settings.providers.active") : t("settings.providers.useProvider")}
             </button>
           </div>
 
@@ -268,7 +326,20 @@ function ProviderCard(props: {
                 onChange={(event) => void onModelChange(provider, event.target.value)}
               />
             </label>
+            {provider === "openai" ? (
+              <label className="ichat-settings-field">
+                <span>{help.endpointLabel}</span>
+                <input
+                  className="ichat-settings-input"
+                  type="text"
+                  value={openaiEndpoint}
+                  placeholder={help.endpointPlaceholder}
+                  onChange={(event) => void onOpenAIEndpointChange(event.target.value)}
+                />
+              </label>
+            ) : null}
           </div>
+          {provider === "openai" && help.endpointNote ? <p>{help.endpointNote}</p> : null}
         </div>
       ) : null}
     </article>
@@ -276,6 +347,7 @@ function ProviderCard(props: {
 }
 
 export function SettingsWorkspace(props: SettingsWorkspaceProps) {
+  const { locale, t } = useI18n()
   const {
     appState,
     promptPreview,
@@ -287,8 +359,10 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     onProviderChange,
     onModelChange,
     onApiKeyChange,
+    onOpenAIEndpointChange,
     onSettingsChange,
     onCopyPrompt,
+    onCopySystemInstructions,
     onSendCurrentContext,
     onClearThread,
     onResetContext
@@ -301,6 +375,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const workspaceRef = useRef<HTMLElement | null>(null)
   const backButtonRef = useRef<HTMLButtonElement | null>(null)
 
+  const settingsSections = useMemo(() => getSettingsSections(t), [t])
   const settings = appState.settings
   const flowContext = appState.flowContext
   const activeProvider = getActiveProvider(settings)
@@ -308,7 +383,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const displayedLocator = getDisplayedLocator(flowContext)
   const previewLength = settings.context.previewDensity === "full" ? 480 : 180
   const primaryBinding = commandBindings.find((binding) => binding.name === "capture-flow-context") ?? null
-  const shortcutLabel = primaryBinding?.shortcut || "Not set"
+  const shortcutLabel = primaryBinding?.shortcut || t("settings.shortcuts.notSet")
   const threadCount = appState.chatThreads[activeProvider]?.length ?? 0
   const contextMode = flowContext ? getFlowContextMode(flowContext) : null
 
@@ -328,41 +403,46 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
 
     if (flowContext.selection?.text?.trim()) {
       cards.push({
-        label: "Selected text",
-        value: snippet(flowContext.selection.text, previewLength, "No explicit selection")
+        label: t("settings.context.cards.selectedText"),
+        value: snippet(flowContext.selection.text, previewLength, t("settings.context.noExplicitSelection"))
       })
     }
 
     if (flowContext.smartTarget) {
       cards.push({
-        label: flowContext.smartTarget.kind === "image" ? "Image target" : flowContext.smartTarget.kind === "video" ? "Video target" : "Smart target",
-        value: formatSmartTargetPreview(flowContext, previewLength)
+        label:
+          flowContext.smartTarget.kind === "image"
+            ? t("settings.context.cards.imageTarget")
+            : flowContext.smartTarget.kind === "video"
+              ? t("settings.context.cards.videoTarget")
+              : t("settings.context.cards.smartTarget"),
+        value: formatSmartTargetPreview(flowContext, previewLength, t)
       })
     }
 
     if (flowContext.implicitContext?.text?.trim()) {
       cards.push({
-        label: "Implicit context",
-        value: snippet(flowContext.implicitContext.text, previewLength, "No implicit context")
+        label: t("settings.context.cards.implicitContext"),
+        value: snippet(flowContext.implicitContext.text, previewLength, t("settings.context.noImplicitContext"))
       })
     }
 
     if (flowContext.attachments.length) {
       cards.push({
-        label: flowContext.attachments.length === 1 ? "Attachment" : "Attachments",
-        value: formatAttachmentPreview(flowContext, previewLength)
+        label: flowContext.attachments.length === 1 ? t("settings.context.cards.attachment") : t("settings.context.cards.attachments"),
+        value: formatAttachmentPreview(flowContext, previewLength, t)
       })
     }
 
     if (displayedLocator) {
       cards.push({
-        label: "Locator",
-        value: snippet(displayedLocator, previewLength, "No locator")
+        label: t("settings.context.cards.locator"),
+        value: snippet(displayedLocator, previewLength, t("settings.context.noLocator"))
       })
     }
 
     return cards
-  }, [displayedLocator, flowContext, previewLength])
+  }, [displayedLocator, flowContext, previewLength, t])
 
   const flowContextParts = useMemo(() => {
     if (!flowContext) {
@@ -372,27 +452,37 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     const parts: string[] = []
 
     if (flowContext.selection?.text?.trim()) {
-      parts.push("Selection")
+      parts.push(t("settings.context.parts.selection"))
     }
 
     if (flowContext.smartTarget) {
-      parts.push(flowContext.smartTarget.kind === "image" ? "Image target" : flowContext.smartTarget.kind === "video" ? "Video target" : "Smart target")
+      parts.push(
+        flowContext.smartTarget.kind === "image"
+          ? t("settings.context.parts.imageTarget")
+          : flowContext.smartTarget.kind === "video"
+            ? t("settings.context.parts.videoTarget")
+            : t("settings.context.parts.smartTarget")
+      )
     }
 
     if (flowContext.implicitContext?.text?.trim()) {
-      parts.push("Implicit context")
+      parts.push(t("settings.context.parts.implicitContext"))
     }
 
     if (flowContext.attachments.length) {
-      parts.push(`${flowContext.attachments.length} attachment${flowContext.attachments.length === 1 ? "" : "s"}`)
+      parts.push(
+        flowContext.attachments.length === 1
+          ? t("settings.context.parts.attachments.one")
+          : t("settings.context.parts.attachments", { count: flowContext.attachments.length })
+      )
     }
 
     if (displayedLocator) {
-      parts.push("Locator")
+      parts.push(t("settings.context.parts.locator"))
     }
 
     return parts
-  }, [displayedLocator, flowContext])
+  }, [displayedLocator, flowContext, t])
 
   useEffect(() => {
     backButtonRef.current?.focus()
@@ -414,14 +504,14 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
           .filter((command) => command.name === "capture-flow-context")
           .map((command) => ({
           name: command.name || "",
-          description: command.description || "No description available.",
+          description: command.description || t("settings.shortcuts.noDescriptionAvailable"),
           shortcut: command.shortcut || ""
           }))
       )
     }
 
     void loadBindings()
-  }, [])
+  }, [t])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -468,24 +558,38 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     if (activeSection === "general") {
       return (
         <section className="ichat-settings-page-section">
-          <SettingsSectionHeader title="General" description="Control confirmation behavior and local chat state without touching provider keys." />
+          <SettingsSectionHeader title={t("settings.general.title")} description={t("settings.general.description")} />
 
           <div className="ichat-settings-panel">
             <SettingsRow
-              label="Confirm destructive actions"
-              description="Ask before clearing threads or removing the current captured FlowContext."
+              label={t("settings.general.language.label")}
+              description={t("settings.general.language.description")}
+              control={
+                <SegmentedControl
+                  value={settings.uiLanguage}
+                  options={LANGUAGE_OPTIONS.map((option) => ({
+                    value: option.value,
+                    label: t(option.labelKey)
+                  }))}
+                  onChange={(value) => void onSettingsChange({ uiLanguage: value })}
+                />
+              }
+            />
+            <SettingsRow
+              label={t("settings.general.confirmDestructiveActions.label")}
+              description={t("settings.general.confirmDestructiveActions.description")}
               control={
                 <button
                   className={`ichat-toggle ${settings.data.confirmDestructiveActions ? "is-on" : ""}`}
                   type="button"
                   onClick={() => void onSettingsChange({ data: { confirmDestructiveActions: !settings.data.confirmDestructiveActions } })}>
-                  {settings.data.confirmDestructiveActions ? "Required" : "Off"}
+                  {settings.data.confirmDestructiveActions ? t("settings.general.confirmDestructiveActions.required") : t("settings.general.confirmDestructiveActions.off")}
                 </button>
               }
             />
             <SettingsRow
-              label="Messages sent with each request"
-              description="Limit how many recent chat messages are attached when sending a new request. Defaults to 6. Set 0 for fresh one-off sends."
+              label={t("settings.general.historyMessageLimit.label")}
+              description={t("settings.general.historyMessageLimit.description")}
               control={
                 <input
                   className="ichat-settings-input ichat-settings-input-number"
@@ -505,11 +609,11 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
               }
             />
             <SettingsRow
-              label="Current provider thread"
-              description={`Clear the ${providerLabels[activeProvider]} thread snapshot stored locally. Messages in other providers stay untouched.`}
+              label={t("settings.general.currentProviderThread.label")}
+              description={t("settings.general.currentProviderThread.description", { providerLabel: providerLabels[activeProvider] })}
               control={
                 <button className="ichat-danger-button" type="button" onClick={onClearThread}>
-                  Clear {threadCount} messages
+                  {t("settings.general.currentProviderThread.clearCount", { count: threadCount })}
                 </button>
               }
               danger
@@ -522,7 +626,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     if (activeSection === "providers") {
       return (
         <section className="ichat-settings-page-section">
-          <SettingsSectionHeader title="LLM Providers" description="Bring your own keys, set model IDs, and decide which provider is active for chat." />
+          <SettingsSectionHeader title={t("settings.providers.title")} description={t("settings.providers.description")} />
 
           <div className="ichat-settings-provider-grid">
             {PROVIDERS.map((provider) => (
@@ -534,9 +638,11 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
                 onToggle={() => setExpandedProvider((current) => (current === provider ? null : provider))}
                 apiKey={appState.apiKeys[provider]}
                 modelId={getProviderModel(settings, provider)}
+                openaiEndpoint={settings.providers.openaiEndpoint}
                 onProviderChange={onProviderChange}
                 onModelChange={onModelChange}
                 onApiKeyChange={onApiKeyChange}
+                onOpenAIEndpointChange={onOpenAIEndpointChange}
               />
             ))}
           </div>
@@ -547,30 +653,30 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     if (activeSection === "context") {
       return (
         <section className="ichat-settings-page-section">
-          <SettingsSectionHeader title="FlowContext" description="Inspect the latest FlowContext, review the generated prompt, and manage the captured context." />
+          <SettingsSectionHeader title={t("settings.context.title")} description={t("settings.context.description")} />
 
           <div className="ichat-settings-panel">
             <SettingsRow
-              label="Auto-send captured context"
-              description="When enabled, a new FlowContext becomes a pending prompt immediately instead of waiting as a composer attachment."
+              label={t("settings.context.autoSend.label")}
+              description={t("settings.context.autoSend.description")}
               control={
                 <button
                   className={`ichat-toggle ${autoSendEnabled ? "is-on" : ""}`}
                   type="button"
                   onClick={() => void onSettingsChange({ context: { autoSend: !autoSendEnabled } })}>
-                  {autoSendEnabled ? "On" : "Off"}
+                  {autoSendEnabled ? t("settings.context.autoSend.on") : t("settings.context.autoSend.off")}
                 </button>
               }
             />
             <SettingsRow
-              label="FlowContext preview density"
-              description="Compact keeps summary cards tight. Full shows longer excerpts before you open the raw fields."
+              label={t("settings.context.previewDensity.label")}
+              description={t("settings.context.previewDensity.description")}
               control={
                 <SegmentedControl
                   value={settings.context.previewDensity}
                   options={[
-                    { value: "compact", label: "Compact" },
-                    { value: "full", label: "Full" }
+                    { value: "compact", label: t("settings.context.previewDensity.compact") },
+                    { value: "full", label: t("settings.context.previewDensity.full") }
                   ]}
                   onChange={(value) => void onSettingsChange({ context: { previewDensity: value } })}
                 />
@@ -579,63 +685,73 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
           </div>
 
           <article className="ichat-settings-card ichat-settings-system-card">
-            <span>FlowContext system instructions</span>
-            <p>These instructions are sent as the system message for FlowContext-driven chats. Editing them directly changes model behavior.</p>
+            <span>{t("settings.context.systemInstructions.label")}</span>
+            <p>{t("settings.context.systemInstructions.description")}</p>
             <textarea
               className="ichat-context-editor-textarea"
               rows={8}
               value={settings.context.systemInstructions}
-              onChange={(event) => void onSettingsChange({ context: { systemInstructions: event.target.value } })}
+              onChange={(event) =>
+                void onSettingsChange({
+                  context: {
+                    systemInstructions: event.target.value,
+                    systemInstructionsCustomized: true
+                  }
+                })
+              }
             />
             <div className="ichat-settings-inline-actions">
+              <button className="ichat-secondary-button" type="button" onClick={onCopySystemInstructions}>
+                {t("settings.context.systemInstructions.copy")}
+              </button>
               <button
                 className="ichat-secondary-button"
                 type="button"
-                onClick={() => void onSettingsChange({ context: { systemInstructions: DEFAULT_FLOWCONTEXT_SYSTEM_INSTRUCTIONS } })}>
-                Restore default
+                onClick={() => void onSettingsChange({ context: { systemInstructionsCustomized: false } })}>
+                {t("settings.context.systemInstructions.restoreDefault")}
               </button>
             </div>
           </article>
 
           <section className="ichat-settings-flow-inspector">
             <div className="ichat-settings-flow-inspector-head">
-              <h3>Inspect FlowContext</h3>
-              <p>Review the captured blocks, page metadata, and the exact user prompt preview before sending.</p>
+              <h3>{t("settings.context.inspect.title")}</h3>
+              <p>{t("settings.context.inspect.description")}</p>
             </div>
 
             {flowContext ? (
               <>
               <div className="ichat-settings-summary-grid is-context-grid">
                 <article className="ichat-settings-summary-card">
-                  <span>Capture mode</span>
-                  <strong>{contextMode === "selection" ? "Selection + implicit context" : "Smart DOM target"}</strong>
+                  <span>{t("settings.context.summary.captureMode")}</span>
+                  <strong>{contextMode === "selection" ? t("settings.context.summary.selectionAndImplicit") : t("settings.context.summary.smartDom")}</strong>
                 </article>
                 <article className="ichat-settings-summary-card">
-                  <span>Contains</span>
-                  <strong>{flowContextParts.length ? flowContextParts.join(" + ") : "Metadata only"}</strong>
+                  <span>{t("settings.context.summary.contains")}</span>
+                  <strong>{flowContextParts.length ? flowContextParts.join(" + ") : t("settings.context.summary.metadataOnly")}</strong>
                 </article>
                 <article className="ichat-settings-summary-card">
-                  <span>Attachments</span>
-                  <strong>{flowContext.attachments.length ? `${flowContext.attachments.length} attached` : "None attached"}</strong>
+                  <span>{t("settings.context.summary.attachments")}</span>
+                  <strong>{flowContext.attachments.length ? t("settings.context.summary.attachedCount", { count: flowContext.attachments.length }) : t("settings.context.summary.noneAttached")}</strong>
                 </article>
                 <article className="ichat-settings-summary-card">
-                  <span>Prompt state</span>
-                  <strong>{pendingState ? `${pendingState.charAt(0).toUpperCase()}${pendingState.slice(1)}` : "Draft not created"}</strong>
+                  <span>{t("settings.context.summary.promptState")}</span>
+                  <strong>{formatPendingStateLabel(pendingState, t)}</strong>
                 </article>
               </div>
 
               <article className="ichat-settings-flow-overview">
                 <div className="ichat-settings-flow-overview-main">
-                  <span>Page</span>
-                  <strong>{flowContext.page.title || flowContext.page.host || "Untitled page"}</strong>
-                  <p>{flowContext.page.url || "Unavailable"}</p>
+                  <span>{t("settings.context.overview.page")}</span>
+                  <strong>{flowContext.page.title || flowContext.page.host || t("settings.context.pageUntitled")}</strong>
+                  <p>{flowContext.page.url || t("common.unavailable")}</p>
                 </div>
                 <div className="ichat-settings-flow-overview-side">
-                  <span>Created</span>
-                  <strong>{new Date(flowContext.createdAt).toLocaleString()}</strong>
+                  <span>{t("settings.context.overview.created")}</span>
+                  <strong>{new Date(flowContext.createdAt).toLocaleString(locale === "zh-CN" ? "zh-CN" : "en-US")}</strong>
                 </div>
                 {flowContextParts.length ? (
-                  <div className="ichat-settings-flow-pill-row" aria-label="FlowContext blocks">
+                  <div className="ichat-settings-flow-pill-row" aria-label={t("settings.context.title")}>
                     {flowContextParts.map((part) => (
                       <span key={part} className="ichat-settings-flow-pill">
                         {part}
@@ -655,31 +771,34 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
               </div>
 
               <div className={`ichat-prompt-preview ${settings.context.previewDensity === "full" ? "is-dense-full" : ""}`}>
-                <span>User prompt preview</span>
-                <pre>{promptPreview || "Prompt will appear here after capture."}</pre>
+                <span>{t("settings.context.promptPreview")}</span>
+                <pre>{promptPreview || t("settings.context.promptPreviewEmpty")}</pre>
               </div>
 
               <div className="ichat-settings-actions-row">
                 <button className="ichat-secondary-button" type="button" onClick={onCopyPrompt}>
-                  Copy prompt
+                  {t("settings.context.actions.copyPrompt")}
                 </button>
                 <button className="ichat-danger-button" type="button" onClick={onResetContext}>
-                  Clear captured context
+                  {t("settings.context.actions.clearCapturedContext")}
                 </button>
                 <button className="ichat-primary-button" type="button" onClick={onSendCurrentContext}>
-                  {pendingState === "error" ? "Retry send" : "Send current context"}
+                  {pendingState === "error" ? t("settings.context.actions.retrySend") : t("settings.context.actions.sendCurrentContext")}
                 </button>
               </div>
               </>
             ) : (
               <div className="ichat-settings-empty-state">
-                <h3>No FlowContext captured yet</h3>
+                <h3>{t("settings.context.empty.title")}</h3>
                 <p>
-                  Capture a page selection or let IChat smart-pick a DOM target to populate this section.
-                  {shortcutLabel ? ` Current shortcut: ${shortcutLabel}.` : ""}
+                  {t("settings.context.empty.description", {
+                    shortcutSuffix: shortcutLabel && shortcutLabel !== t("settings.shortcuts.notSet")
+                      ? t("settings.context.empty.shortcutSuffix", { shortcut: shortcutLabel })
+                      : ""
+                  })}
                 </p>
                 <button className="ichat-primary-button" type="button" onClick={onTriggerCapture}>
-                  Start capture
+                  {t("settings.context.empty.startCapture")}
                 </button>
               </div>
             )}
@@ -690,54 +809,54 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
 
     return (
       <section className="ichat-settings-page-section">
-        <SettingsSectionHeader title="Shortcuts" description="Review the current capture binding and jump to Chrome's shortcut settings." />
+        <SettingsSectionHeader title={t("settings.shortcuts.title")} description={t("settings.shortcuts.description")} />
 
         <div className="ichat-settings-card-grid is-shortcut-grid">
-          {(commandBindings.length ? commandBindings : [{ name: "capture-flow-context", description: "Capture page context into IChat.", shortcut: "" }]).map((binding) => (
+          {(commandBindings.length ? commandBindings : [{ name: "capture-flow-context", description: t("settings.shortcuts.defaultCaptureDescription"), shortcut: "" }]).map((binding) => (
             <article key={binding.name} className="ichat-settings-card is-shortcut-card">
-              <span>{binding.name || "Unnamed command"}</span>
-              <strong>{binding.shortcut || "Not set"}</strong>
+              <span>{binding.name || t("settings.shortcuts.unnamedCommand")}</span>
+              <strong>{binding.shortcut || t("settings.shortcuts.notSet")}</strong>
               <p>{binding.description}</p>
             </article>
           ))}
         </div>
 
         <div className="ichat-settings-note">
-          Change extension shortcuts in{" "}
+          {t("settings.shortcuts.notePrefix")}
           <button className="ichat-settings-link-button" type="button" onClick={() => void handleOpenShortcutSettings()}>
-            chrome://extensions/shortcuts
+            {t("settings.shortcuts.openChromeSettings")}
           </button>
-          .
+          {t("settings.shortcuts.noteSuffix")}
         </div>
       </section>
     )
   }
 
-  const activeSectionMeta = SETTINGS_SECTIONS.find((section) => section.id === activeSection)
+  const activeSectionMeta = settingsSections.find((section) => section.id === activeSection)
 
   return (
     <div className="ichat-settings-overlay" role="presentation">
-      <section className="ichat-settings-workspace" ref={workspaceRef} role="dialog" aria-modal="true" aria-label="IChat settings">
+      <section className="ichat-settings-workspace" ref={workspaceRef} role="dialog" aria-modal="true" aria-label={t("settings.title")}>
         <header className="ichat-settings-topbar">
           <div className="ichat-settings-topbar-main">
             <button className="ichat-settings-back" ref={backButtonRef} type="button" onClick={onClose}>
               <svg className="ichat-settings-back-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none">
                 <path d="M15 6L9 12L15 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <span>Back to app</span>
+              <span>{t("common.backToApp")}</span>
             </button>
             <div>
-              <p className="ichat-eyebrow">Settings</p>
-              <h1>{activeSectionMeta?.label || "Settings"}</h1>
-              <p className="ichat-subtitle">{activeSectionMeta?.description || "Manage providers, FlowContext presentation, shortcuts, and local chat state."}</p>
+              <p className="ichat-eyebrow">{t("settings.title")}</p>
+              <h1>{activeSectionMeta?.label || t("settings.title")}</h1>
+              <p className="ichat-subtitle">{activeSectionMeta?.description || t("settings.subtitle")}</p>
             </div>
           </div>
         </header>
 
         <div className="ichat-settings-shell">
           <aside className="ichat-settings-sidebar">
-            <nav className="ichat-settings-nav" aria-label="Settings sections">
-              {SETTINGS_SECTIONS.map((section) => (
+            <nav className="ichat-settings-nav" aria-label={t("settings.title")}>
+              {settingsSections.map((section) => (
                 <SectionNavButton
                   key={section.id}
                   id={section.id}
