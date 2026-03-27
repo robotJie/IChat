@@ -161,6 +161,7 @@ export function IChatApp({ viewMode }: IChatAppProps) {
   const activeProvider = getActiveProvider(appState.settings)
   const currentPendingPrompt = appState.pendingPrompt
   const pendingState = currentPendingPrompt && currentPendingPrompt.flowContextId === appState.flowContext?.id ? currentPendingPrompt.status : null
+  const captureErrorBanner = appState.captureStatus.state === "error" ? appState.captureStatus.message : null
 
   const triggerCapture = async () => {
     await chrome.runtime.sendMessage({ type: "ICHAT_TRIGGER_CAPTURE" })
@@ -310,6 +311,10 @@ export function IChatApp({ viewMode }: IChatAppProps) {
               </svg>
             </button>
           </header>
+
+          {captureErrorBanner ? (
+            <div className="ichat-banner is-warning">{captureErrorBanner}</div>
+          ) : null}
 
           <ProviderConversation
             key={activeProvider}

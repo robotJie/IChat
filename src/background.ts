@@ -6,6 +6,8 @@ import type { FlowContext } from "./lib/types"
 
 let lastWindowId: number = chrome.windows.WINDOW_ID_CURRENT
 const DEBUG_CAPTURE = true
+const CAPTURE_PING_ATTEMPTS = 12
+const CAPTURE_PING_DELAY_MS = 250
 
 function debugCapture(stage: string, payload?: unknown) {
   if (!DEBUG_CAPTURE) {
@@ -76,12 +78,12 @@ chrome.commands.onCommand.addListener((command) => {
   }
 
   openSidePanelForGesture()
-  void handleCaptureCommand()
+  void handleCaptureCommand().catch(handleCaptureCommandError)
 })
 
 chrome.action.onClicked.addListener(() => {
   openSidePanelForGesture()
-  void handleCaptureCommand()
+  void handleCaptureCommand().catch(handleCaptureCommandError)
 })
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -92,7 +94,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "ICHAT_TRIGGER_CAPTURE") {
     handleCaptureCommand()
       .then(() => sendResponse({ ok: true }))
-      .catch((error: Error) => sendResponse({ ok: false, error: error.message }))
+      .catch(async (error: Error) => {
+        await handleCaptureCommandError(error)
+        sendResponse({ ok: false, error: toUserFacingCaptureError(error).message })
+      })
     return true
   }
 
@@ -169,19 +174,33 @@ async function handleCaptureCommand() {
   })
 }
 
+async function handleCaptureCommandError(error: unknown) {
+  const normalizedError = toUserFacingCaptureError(error)
+  console.debug("IChat capture command failed", normalizedError)
+  await handleCaptureFailure(normalizedError.message)
+}
+
 async function pingPage(tabId: number) {
-  for (let attempt = 0; attempt < 12; attempt += 1) {
+  let lastErrorMessage: string | null = null
+
+  for (let attempt = 0; attempt < CAPTURE_PING_ATTEMPTS; attempt += 1) {
     try {
       const response = await chrome.tabs.sendMessage(tabId, { type: "ICHAT_PING" })
       if (response?.ok) {
         return true
       }
-    } catch {
-      await delay(250)
+      lastErrorMessage = "Content script ping returned no acknowledgement."
+    } catch (error) {
+      lastErrorMessage = error instanceof Error ? error.message : String(error)
+      await delay(CAPTURE_PING_DELAY_MS)
     }
   }
 
-  throw new Error("Content script is not ready yet. Refresh the page once if it was opened before the extension loaded.")
+  throw new Error(
+    lastErrorMessage
+      ? `Content script did not become ready. Native error: ${lastErrorMessage}`
+      : "Content script did not become ready after injection."
+  )
 }
 
 async function ensureContentScriptInjected(tabId: number) {
@@ -202,12 +221,29 @@ async function ensureContentScriptInjected(tabId: number) {
       files
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-
-    if (!message.includes("Cannot access") && !message.includes("The extensions gallery cannot be scripted")) {
-      throw error
-    }
+    throw new Error(`Content script injection failed. Native error: ${error instanceof Error ? error.message : String(error)}`)
   }
+}
+
+function toUserFacingCaptureError(error: unknown) {
+  const rawMessage = error instanceof Error ? error.message : String(error)
+  const normalizedMessage = rawMessage.trim() || "Unknown capture error."
+  const loweredMessage = normalizedMessage.toLowerCase()
+
+  if (
+    loweredMessage.includes("extensions gallery cannot be scripted") ||
+    loweredMessage.includes("cannot access contents of url") ||
+    loweredMessage.includes("cannot access a chrome://") ||
+    loweredMessage.includes("cannot access this page")
+  ) {
+    return new Error(`Chrome blocked capture on this protected or restricted page. Native error: ${normalizedMessage}`)
+  }
+
+  if (loweredMessage.includes("receiving end does not exist")) {
+    return new Error(`The page did not accept the content script after injection. Native error: ${normalizedMessage}`)
+  }
+
+  return new Error(normalizedMessage)
 }
 
 async function handleCapturedFlowContext(flowContext: FlowContext) {
