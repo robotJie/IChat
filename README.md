@@ -1,6 +1,6 @@
 # IChat
 
-![IChat logotype](assets/brand/ichat-wordmark.svg)
+![IChat logotype](assets/icon.svg)
 
 IChat is a Chrome side panel extension for context-aware AI chat.
 It helps you capture context from the current web page and send it to your selected AI provider without leaving the browser.
@@ -43,11 +43,11 @@ If IChat helps you, tips for the author are welcome.
 
 ### WeChat
 
-![WeChat Sponsor QR](assets/sponsor/wechat.png)
+<img src="assets/sponsor/wechat.png" alt="WeChat Sponsor QR" width="280" />
 
 ### Alipay
 
-![Alipay Sponsor QR](assets/sponsor/alipay.jpg)
+<img src="assets/sponsor/alipay.jpg" alt="Alipay Sponsor QR" width="280" />
 
 ## Development
 
