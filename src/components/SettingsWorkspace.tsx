@@ -24,7 +24,7 @@ interface SettingsWorkspaceProps {
   onResetContext: () => void | Promise<void>
 }
 
-type SettingsSectionId = "general" | "providers" | "context" | "shortcuts"
+type SettingsSectionId = "general" | "providers" | "context" | "about" | "sponsor"
 
 interface CommandBindingSummary {
   name: string
@@ -40,12 +40,27 @@ const LANGUAGE_OPTIONS: Array<{ value: UiLanguage; labelKey: "settings.general.l
 
 const PROVIDERS: ProviderId[] = ["openai", "gemini", "anthropic"]
 
+const ABOUT_LINKS = {
+  docs: "https://robotjie.github.io/IChat/",
+  privacy: "https://robotjie.github.io/IChat/privacy-policy.html",
+  feedbackEmail: "robotjie@icloud.com"
+} as const
+
+const WECHAT_SPONSOR_QR_SRC = new URL("../../assets/sponsor/wechat.png", import.meta.url).href
+const ALIPAY_SPONSOR_QR_SRC = new URL("../../assets/sponsor/alipay.jpg", import.meta.url).href
+
+const SPONSOR_QR_CODES = [
+  { id: "wechat", src: WECHAT_SPONSOR_QR_SRC, titleKey: "settings.sponsor.wechatTitle" as const },
+  { id: "alipay", src: ALIPAY_SPONSOR_QR_SRC, titleKey: "settings.sponsor.alipayTitle" as const }
+] as const
+
 function getSettingsSections(t: ReturnType<typeof useI18n>["t"]): Array<{ id: SettingsSectionId; label: string; description: string }> {
   return [
     { id: "general", label: t("settings.sections.general.label"), description: t("settings.sections.general.description") },
     { id: "providers", label: t("settings.sections.providers.label"), description: t("settings.sections.providers.description") },
     { id: "context", label: t("settings.sections.context.label"), description: t("settings.sections.context.description") },
-    { id: "shortcuts", label: t("settings.sections.shortcuts.label"), description: t("settings.sections.shortcuts.description") }
+    { id: "about", label: t("settings.sections.about.label"), description: t("settings.sections.about.description") },
+    { id: "sponsor", label: t("settings.sections.sponsor.label"), description: t("settings.sections.sponsor.description") }
   ]
 }
 
@@ -346,6 +361,81 @@ function ProviderCard(props: {
   )
 }
 
+function LinkActionCard(props: {
+  label: string
+  description: string
+  href: string
+  actionLabel: string
+  onOpen: (href: string) => void | Promise<void>
+}) {
+  const { label, description, href, actionLabel, onOpen } = props
+
+  return (
+    <article className="ichat-settings-card ichat-settings-link-card">
+      <span>{label}</span>
+      <strong>{href}</strong>
+      <p>{description}</p>
+      <div className="ichat-settings-inline-actions is-start">
+        <button className="ichat-secondary-button" type="button" onClick={() => void onOpen(href)}>
+          {actionLabel}
+        </button>
+      </div>
+    </article>
+  )
+}
+
+function FeedbackActionCard(props: {
+  email: string
+  copied: boolean
+  onCopy: (email: string) => void | Promise<void>
+}) {
+  const { t } = useI18n()
+  const { email, copied, onCopy } = props
+
+  return (
+    <article className="ichat-settings-card ichat-settings-link-card">
+      <span>{t("settings.about.feedback.label")}</span>
+      <strong>{email}</strong>
+      <p>{t("settings.about.feedback.description")}</p>
+      <div className="ichat-settings-inline-actions is-start">
+        <button className="ichat-secondary-button" type="button" onClick={() => void onCopy(email)}>
+          {copied ? t("settings.about.feedback.copied") : t("settings.about.feedback.copy")}
+        </button>
+      </div>
+    </article>
+  )
+}
+
+function SponsorQrCard(props: {
+  title: string
+  src: string
+}) {
+  const { t } = useI18n()
+  const { title, src } = props
+  const [imageFailed, setImageFailed] = useState(false)
+
+  return (
+    <article className="ichat-settings-card ichat-sponsor-card">
+      <strong>{title}</strong>
+      <div className="ichat-sponsor-card-media">
+        {!imageFailed ? (
+          <img
+            className="ichat-sponsor-card-image"
+            src={src}
+            alt={title}
+            onError={() => setImageFailed(true)}
+          />
+        ) : (
+          <div className="ichat-sponsor-card-placeholder">
+            <strong>{t("settings.sponsor.missingTitle")}</strong>
+            <p>{t("settings.sponsor.missingDescription")}</p>
+          </div>
+        )}
+      </div>
+    </article>
+  )
+}
+
 export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const { locale, t } = useI18n()
   const {
@@ -371,9 +461,11 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("general")
   const [commandBindings, setCommandBindings] = useState<CommandBindingSummary[]>([])
   const [expandedProvider, setExpandedProvider] = useState<ProviderId | null>(null)
+  const [feedbackCopied, setFeedbackCopied] = useState(false)
 
   const workspaceRef = useRef<HTMLElement | null>(null)
   const backButtonRef = useRef<HTMLButtonElement | null>(null)
+  const feedbackCopyTimerRef = useRef<number | null>(null)
 
   const settingsSections = useMemo(() => getSettingsSections(t), [t])
   const settings = appState.settings
@@ -387,11 +479,27 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const threadCount = appState.chatThreads[activeProvider]?.length ?? 0
   const contextMode = flowContext ? getFlowContextMode(flowContext) : null
 
-  const handleOpenShortcutSettings = async () => {
+  const openExternalUrl = async (url: string) => {
     await chrome.tabs.create({
-      url: "chrome://extensions/shortcuts",
+      url,
       active: true
     })
+  }
+
+  const handleOpenShortcutSettings = async () => {
+    await openExternalUrl("chrome://extensions/shortcuts")
+  }
+
+  const handleCopyFeedbackEmail = async (email: string) => {
+    await navigator.clipboard.writeText(email)
+    setFeedbackCopied(true)
+    if (feedbackCopyTimerRef.current !== null) {
+      window.clearTimeout(feedbackCopyTimerRef.current)
+    }
+    feedbackCopyTimerRef.current = window.setTimeout(() => {
+      setFeedbackCopied(false)
+      feedbackCopyTimerRef.current = null
+    }, 1600)
   }
 
   const contextCards = useMemo(() => {
@@ -554,6 +662,14 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [onClose])
 
+  useEffect(() => {
+    return () => {
+      if (feedbackCopyTimerRef.current !== null) {
+        window.clearTimeout(feedbackCopyTimerRef.current)
+      }
+    }
+  }, [])
+
   const renderActiveSection = () => {
     if (activeSection === "general") {
       return (
@@ -594,6 +710,18 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
                     })
                   }
                 />
+              }
+            />
+            <SettingsRow
+              label={t("settings.general.captureShortcut.label")}
+              description={t("settings.general.captureShortcut.description", { shortcut: shortcutLabel })}
+              control={
+                <>
+                  <span className="ichat-settings-chip">{shortcutLabel}</span>
+                  <button className="ichat-secondary-button" type="button" onClick={() => void handleOpenShortcutSettings()}>
+                    {t("settings.general.captureShortcut.change")}
+                  </button>
+                </>
               }
             />
             <SettingsRow
@@ -795,27 +923,57 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
       )
     }
 
+    if (activeSection === "about") {
+      return (
+        <section className="ichat-settings-page-section">
+          <SettingsSectionHeader title={t("settings.about.title")} description={t("settings.about.description")} />
+
+          <div className="ichat-settings-card-grid">
+            <LinkActionCard
+              label={t("settings.about.docs.label")}
+              description={t("settings.about.docs.description")}
+              href={ABOUT_LINKS.docs}
+              actionLabel={t("settings.about.openLink")}
+              onOpen={openExternalUrl}
+            />
+            <LinkActionCard
+              label={t("settings.about.privacy.label")}
+              description={t("settings.about.privacy.description")}
+              href={ABOUT_LINKS.privacy}
+              actionLabel={t("settings.about.openLink")}
+              onOpen={openExternalUrl}
+            />
+            <FeedbackActionCard
+              email={ABOUT_LINKS.feedbackEmail}
+              copied={feedbackCopied}
+              onCopy={handleCopyFeedbackEmail}
+            />
+          </div>
+        </section>
+      )
+    }
+
+    if (activeSection === "sponsor") {
+      return (
+        <section className="ichat-settings-page-section">
+          <SettingsSectionHeader title={t("settings.sponsor.title")} description="" />
+
+          <div className="ichat-settings-card-grid">
+            {SPONSOR_QR_CODES.map((item) => (
+              <SponsorQrCard
+                key={item.id}
+                title={t(item.titleKey)}
+                src={item.src}
+              />
+            ))}
+          </div>
+        </section>
+      )
+    }
+
     return (
       <section className="ichat-settings-page-section">
-        <SettingsSectionHeader title={t("settings.shortcuts.title")} description={t("settings.shortcuts.description")} />
-
-        <div className="ichat-settings-card-grid is-shortcut-grid">
-          {(commandBindings.length ? commandBindings : [{ name: "capture-flow-context", description: t("settings.shortcuts.defaultCaptureDescription"), shortcut: "" }]).map((binding) => (
-            <article key={binding.name} className="ichat-settings-card is-shortcut-card">
-              <span>{binding.name || t("settings.shortcuts.unnamedCommand")}</span>
-              <strong>{binding.shortcut || t("settings.shortcuts.notSet")}</strong>
-              <p>{binding.description}</p>
-            </article>
-          ))}
-        </div>
-
-        <div className="ichat-settings-note">
-          {t("settings.shortcuts.notePrefix")}
-          <button className="ichat-settings-link-button" type="button" onClick={() => void handleOpenShortcutSettings()}>
-            {t("settings.shortcuts.openChromeSettings")}
-          </button>
-          {t("settings.shortcuts.noteSuffix")}
-        </div>
+        <SettingsSectionHeader title={t("settings.title")} description={t("settings.subtitle")} />
       </section>
     )
   }

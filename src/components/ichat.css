@@ -647,6 +647,58 @@ a:focus-visible {
   gap: 10px;
 }
 
+.ichat-settings-inline-actions.is-start {
+  justify-content: flex-start;
+}
+
+.ichat-settings-link-card {
+  min-height: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.ichat-settings-link-card strong {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.ichat-sponsor-card {
+  min-height: 0;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.ichat-sponsor-card-media {
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px dashed var(--ichat-line-strong);
+  background: #17181a;
+}
+
+.ichat-sponsor-card-image {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  border-radius: 16px;
+  border: 1px solid var(--ichat-line-strong);
+  background: #fff;
+  object-fit: contain;
+}
+
+.ichat-sponsor-card-placeholder {
+  display: grid;
+  gap: 8px;
+  text-align: center;
+}
+
+.ichat-sponsor-card-placeholder p {
+  margin: 0;
+}
+
 .ichat-settings-card p,
 .ichat-settings-summary-card strong,
 .ichat-settings-card strong,

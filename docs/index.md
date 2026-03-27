@@ -9,8 +9,8 @@ IChat is a Chrome side panel extension for context-aware AI chat on the web.
 These pages are intended to be published from the repository `docs/` folder via GitHub Pages.
 
 <div style="display:flex;gap:12px;flex-wrap:wrap;margin:20px 0 24px;">
-  <a href="./index.md" style="display:inline-block;padding:10px 16px;border:1px solid #2d3748;border-radius:999px;text-decoration:none;font-weight:600;background:#111827;color:#f9fafb;">English</a>
-  <a href="./index.zh-CN.md" style="display:inline-block;padding:10px 16px;border:1px solid #d1d5db;border-radius:999px;text-decoration:none;font-weight:600;background:#ffffff;color:#111827;">简体中文</a>
+  <a href="./index.html" style="display:inline-block;padding:10px 16px;border:1px solid #2d3748;border-radius:999px;text-decoration:none;font-weight:600;background:#111827;color:#f9fafb;">English</a>
+  <a href="./index.zh-CN.html" style="display:inline-block;padding:10px 16px;border:1px solid #d1d5db;border-radius:999px;text-decoration:none;font-weight:600;background:#ffffff;color:#111827;">简体中文</a>
 </div>
 
 ## Pages
