@@ -170,7 +170,7 @@ async function handleCaptureCommand() {
 }
 
 async function pingPage(tabId: number) {
-  for (let attempt = 0; attempt < 6; attempt += 1) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
     try {
       const response = await chrome.tabs.sendMessage(tabId, { type: "ICHAT_PING" })
       if (response?.ok) {

@@ -1,6 +1,6 @@
 import type { TranslationCatalog } from "./en"
 
-export const zhCNCatalog: TranslationCatalog = {
+export const zhCNCatalog = {
   "settings.context.systemInstructions.copy": "\u590d\u5236",
   "common.close": "关闭",
   "common.backToApp": "返回应用",
@@ -28,10 +28,6 @@ export const zhCNCatalog: TranslationCatalog = {
   "settings.general.language.system": "跟随系统",
   "settings.general.language.en": "English",
   "settings.general.language.zhCN": "简体中文",
-  "settings.general.confirmDestructiveActions.label": "危险操作二次确认",
-  "settings.general.confirmDestructiveActions.description": "清空会话或移除当前捕获的 FlowContext 前先确认。",
-  "settings.general.confirmDestructiveActions.required": "需要确认",
-  "settings.general.confirmDestructiveActions.off": "关闭",
   "settings.general.historyMessageLimit.label": "每次请求附带的消息数",
   "settings.general.historyMessageLimit.description": "限制发送新请求时附带的最近聊天消息数量。默认 6。设为 0 表示每次都从空上下文开始。",
   "settings.general.currentProviderThread.label": "当前提供商会话",
@@ -177,4 +173,18 @@ export const zhCNCatalog: TranslationCatalog = {
   "state.clearedContext": "已清除当前 FlowContext 草稿",
   "confirm.clearThread": "确定要清除已保存的 {providerLabel} 会话吗？",
   "confirm.resetContext": "确定要重置当前 FlowContext 草稿和待发送提示吗？"
-}
+} as TranslationCatalog
+
+zhCNCatalog["settings.providers.openai.note"] = "\u9002\u5408\u4f5c\u4e3a\u517c\u5bb9 OpenAI \u63a5\u53e3\u7684\u5e73\u8861\u578b\u9ed8\u8ba4\u804a\u5929\u6a21\u578b\u3002\u4f60\u4e5f\u53ef\u4ee5\u901a\u8fc7\u4e0b\u9762\u7684\u81ea\u5b9a\u4e49 endpoint\uff0c\u628a\u8fd9\u5f20\u5361\u6307\u5411\u4efb\u4f55 OpenAI-compatible \u63d0\u4f9b\u5546\u3002"
+zhCNCatalog["settings.providers.openai.endpointNote"] = "\u53ef\u9009\u3002\u7559\u7a7a\u8868\u793a\u5b98\u65b9 OpenAI\u3002\u82e5\u4f7f\u7528\u517c\u5bb9\u63d0\u4f9b\u5546\uff0c\u8bf7\u586b\u5199\u5b8c\u6574\u7684 base URL\uff0c\u901a\u5e38\u4ee5 /v1 \u7ed3\u5c3e\u3002"
+zhCNCatalog["capture.smart.title"] = "IChat \u667a\u80fd\u6355\u83b7"
+zhCNCatalog["capture.smart.subtitle"] = "\u6eda\u8f6e\u5207\u6362\u8303\u56f4 | \u5de6\u952e\u786e\u8ba4 | Esc \u53d6\u6d88"
+zhCNCatalog["capture.flash.title"] = "IChat \u5df2\u6355\u83b7"
+zhCNCatalog["capture.flash.selection"] = "\u9009\u4e2d\u6587\u672c + \u9690\u5f0f\u4e0a\u4e0b\u6587"
+zhCNCatalog["capture.flash.smartImage"] = "\u667a\u80fd\u56fe\u7247\u4e0a\u4e0b\u6587"
+zhCNCatalog["capture.flash.smartVideo"] = "\u667a\u80fd\u89c6\u9891\u4e0a\u4e0b\u6587"
+zhCNCatalog["capture.flash.smartDom"] = "\u667a\u80fd DOM \u4e0a\u4e0b\u6587"
+zhCNCatalog["capture.errors.noSeed"] = "\u672a\u627e\u5230\u53ef\u7528\u7684\u6355\u83b7\u8d77\u70b9\u3002\u8bf7\u5c06\u6307\u9488\u79fb\u5230\u76ee\u6807\u533a\u57df\u540e\u91cd\u8bd5\u3002"
+zhCNCatalog["capture.errors.noReadableTarget"] = "\u5f53\u524d\u60ac\u505c\u533a\u57df\u6ca1\u6709\u8db3\u591f\u7684\u53ef\u8bfb\u6587\u672c\u6216\u5a92\u4f53\u5185\u5bb9\u3002\u8bf7\u79fb\u52a8\u6307\u9488\u540e\u91cd\u8bd5\u3002"
+zhCNCatalog["capture.errors.buildFailed"] = "\u6784\u5efa FlowContext \u5931\u8d25"
+zhCNCatalog["capture.errors.cancelled"] = "\u5df2\u53d6\u6d88\u6355\u83b7"

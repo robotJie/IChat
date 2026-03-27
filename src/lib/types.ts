@@ -172,7 +172,6 @@ export interface IChatSettings {
     showHints: boolean
   }
   data: {
-    confirmDestructiveActions: boolean
     historyMessageLimit: number
   }
 }

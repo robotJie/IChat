@@ -26,9 +26,9 @@ import {
   DEFAULT_SETTINGS,
   dispatchStatusPayload,
   EMPTY_API_KEYS,
-  EMPTY_THREADS,
-  STORAGE_KEYS
+  EMPTY_THREADS
 } from "./prompt-builder"
+import { STORAGE_KEYS } from "./storage-keys"
 
 export const storage = new Storage({ area: "local" })
 
@@ -351,10 +351,6 @@ export function normalizeSettings(value: unknown): IChatSettings {
       showHints: typeof shortcuts.showHints === "boolean" ? shortcuts.showHints : DEFAULT_SETTINGS.shortcuts.showHints
     },
     data: {
-      confirmDestructiveActions:
-        typeof data.confirmDestructiveActions === "boolean"
-          ? data.confirmDestructiveActions
-          : DEFAULT_SETTINGS.data.confirmDestructiveActions,
       historyMessageLimit: clampHistoryMessageLimit(data.historyMessageLimit)
     }
   }

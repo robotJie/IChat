@@ -1,15 +1,6 @@
 import type { DispatchStatus, FlowContext, FlowContextAttachmentMeta, IChatApiKeys, IChatSettings, PendingPrompt, ProviderId, ProviderThreads } from "./types"
 import { DEFAULT_FLOWCONTEXT_SYSTEM_INSTRUCTIONS } from "./flowcontext-system-instructions"
-
-export const STORAGE_KEYS = {
-  flowContext: "ichat.flowContext",
-  settings: "ichat.settings",
-  apiKeys: "ichat.apiKeys",
-  captureStatus: "ichat.captureStatus",
-  dispatchStatus: "ichat.dispatchStatus",
-  pendingPrompt: "ichat.pendingPrompt",
-  chatThreads: "ichat.chatThreads"
-} as const
+export { STORAGE_KEYS } from "./storage-keys"
 
 export const DEFAULT_MODELS: Record<ProviderId, string> = {
   openai: "gpt-4.1-mini",
@@ -37,7 +28,6 @@ export const DEFAULT_SETTINGS: IChatSettings = {
     showHints: true
   },
   data: {
-    confirmDestructiveActions: true,
     historyMessageLimit: 6
   }
 }
@@ -55,7 +45,7 @@ export const EMPTY_THREADS: ProviderThreads = {
 }
 
 export const providerLabels: Record<ProviderId, string> = {
-  openai: "OpenAI",
+  openai: "OpenAI-compatible",
   gemini: "Gemini",
   anthropic: "Anthropic"
 }

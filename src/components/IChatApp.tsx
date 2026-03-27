@@ -265,10 +265,6 @@ export function IChatApp({ viewMode }: IChatAppProps) {
   }
 
   const confirmDangerousAction = async (message: string) => {
-    if (!appState.settings.data.confirmDestructiveActions) {
-      return true
-    }
-
     return window.confirm(message)
   }
 

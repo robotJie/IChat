@@ -576,18 +576,6 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
               }
             />
             <SettingsRow
-              label={t("settings.general.confirmDestructiveActions.label")}
-              description={t("settings.general.confirmDestructiveActions.description")}
-              control={
-                <button
-                  className={`ichat-toggle ${settings.data.confirmDestructiveActions ? "is-on" : ""}`}
-                  type="button"
-                  onClick={() => void onSettingsChange({ data: { confirmDestructiveActions: !settings.data.confirmDestructiveActions } })}>
-                  {settings.data.confirmDestructiveActions ? t("settings.general.confirmDestructiveActions.required") : t("settings.general.confirmDestructiveActions.off")}
-                </button>
-              }
-            />
-            <SettingsRow
               label={t("settings.general.historyMessageLimit.label")}
               description={t("settings.general.historyMessageLimit.description")}
               control={

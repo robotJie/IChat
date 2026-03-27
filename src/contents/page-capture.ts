@@ -7,6 +7,8 @@ import {
   findPreferredSmartCaptureSeed,
   pickBestCandidateIndex
 } from "../lib/flow-context"
+import { resolveLocale, translate, type SupportedLocale } from "../lib/i18n-core"
+import { STORAGE_KEYS } from "../lib/storage-keys"
 
 export const config: PlasmoCSConfig = {
   matches: ["<all_urls>"],
@@ -19,8 +21,6 @@ const captureScope = globalThis as typeof globalThis & {
 }
 
 if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
-  captureScope.__ICHAT_PAGE_CAPTURE_READY__ = true
-
   const state = {
     overlay: null,
     style: null,
@@ -31,7 +31,8 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
     },
     captureSession: null,
     flashTimer: null,
-    suppressPrimaryActivationUntil: 0
+    suppressPrimaryActivationUntil: 0,
+    locale: "en" as SupportedLocale
   };
 
   const CAPTURE_UI_ID = "ichat-flow-capture-ui";
@@ -132,6 +133,14 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
   window.addEventListener("mouseup", handleSuppressedPrimaryActivation, true);
   window.addEventListener("click", handleSuppressedPrimaryActivation, true);
   window.addEventListener("wheel", handleWheel, { capture: true, passive: false });
+  chrome.storage?.onChanged?.addListener((changes, areaName) => {
+    if (areaName !== "local" || !changes[STORAGE_KEYS.settings]) {
+      return
+    }
+
+    state.locale = resolveLocale(changes[STORAGE_KEYS.settings].newValue || {})
+  })
+  void syncCaptureLocale()
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message || !message.type) {
@@ -166,6 +175,7 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
 
     return false;
   });
+  captureScope.__ICHAT_PAGE_CAPTURE_READY__ = true
 
   function handlePointerMove(event) {
     if (isCaptureUiElement(event.target)) {
@@ -271,6 +281,7 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
   }
 
   async function startCapture(tabMeta) {
+    await syncCaptureLocale()
     clearFlashTimer();
     cancelCaptureSession(false);
 
@@ -296,7 +307,7 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
 
     if (!seed) {
       emitMessage("ICHAT_CAPTURE_ERROR", {
-        error: "No capture seed found. Move the pointer over the target area and try again."
+        error: t("capture.errors.noSeed")
       });
       return { ok: false, error: "No capture seed" };
     }
@@ -318,7 +329,7 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
 
     if (!trail.length) {
       emitMessage("ICHAT_CAPTURE_ERROR", {
-        error: "The hovered area does not contain enough readable text or media. Move the pointer and try again."
+        error: t("capture.errors.noReadableTarget")
       });
       return;
     }
@@ -377,8 +388,8 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
 
     showHighlight(
       candidate.rect,
-      "IChat Smart Capture",
-      "Scroll to resize | Left click confirm | Esc cancel"
+      t("capture.smart.title"),
+      t("capture.smart.subtitle")
     );
   }
 
@@ -403,17 +414,17 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
     cancelCaptureSession(false);
 
     if (!flowContext) {
-      emitMessage("ICHAT_CAPTURE_ERROR", { error: "Failed to build FlowContext" });
+      emitMessage("ICHAT_CAPTURE_ERROR", { error: t("capture.errors.buildFailed") });
       return;
     }
 
     if (capturedCandidate && capturedCandidate.rect) {
       const subtitle = capturedCandidate.kind === "image"
-        ? "Smart image context"
+        ? t("capture.flash.smartImage")
         : capturedCandidate.kind === "video"
-          ? "Smart video context"
-          : "Smart DOM context";
-      flashRect(capturedCandidate.rect, "IChat Captured", subtitle);
+          ? t("capture.flash.smartVideo")
+          : t("capture.flash.smartDom");
+      flashRect(capturedCandidate.rect, t("capture.flash.title"), subtitle);
     }
 
     emitMessage("ICHAT_FLOW_CONTEXT_CAPTURED", { flowContext });
@@ -433,7 +444,7 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
     hideHighlight();
 
     if (announce) {
-      emitMessage("ICHAT_CAPTURE_CANCELLED", { reason: "Capture cancelled" });
+      emitMessage("ICHAT_CAPTURE_CANCELLED", { reason: t("capture.errors.cancelled") });
     }
   }
 
@@ -460,7 +471,20 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
       return;
     }
 
-    flashRect(rect, "IChat Captured", "Selection + implicit context");
+    flashRect(rect, t("capture.flash.title"), t("capture.flash.selection"));
+  }
+
+  async function syncCaptureLocale() {
+    try {
+      const stored = await chrome.storage.local.get(STORAGE_KEYS.settings)
+      state.locale = resolveLocale(stored?.[STORAGE_KEYS.settings] || {})
+    } catch {
+      state.locale = resolveLocale({})
+    }
+  }
+
+  function t(key) {
+    return translate(state.locale, key)
   }
 
   function flashRect(rect, title, subtitle) {
