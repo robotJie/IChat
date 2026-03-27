@@ -2,3 +2,4 @@ node_modules
 .plasmo
 build
 *.zip
+.codex
