@@ -8,6 +8,9 @@ Last updated: March 27, 2026
 
 This Privacy Policy explains how IChat handles information when you use the extension.
 
+Language:
+[English](./privacy-policy.md) | [简体中文](./privacy-policy.zh-CN.md)
+
 ## Overview
 
 IChat is a Chrome extension that captures context from the current web page only when you explicitly trigger it, then sends the resulting prompt to the AI provider you selected in the extension settings.
@@ -143,16 +146,3 @@ This Privacy Policy may be updated when the product behavior changes, especially
 ## Contact
 
 At this stage, the project does not yet publish a dedicated support contact address. When the public repository and project contact channels are finalized, this section should be updated with a stable contact method.
-
----
-
-## 中文摘要
-
-IChat 当前是一个本地优先的 Chrome 扩展：
-
-- 只有在用户主动触发时才抓取页面上下文
-- API Key、聊天记录、FlowContext 和附件主要保存在本地
-- 当前没有项目自建后端，也没有内置统计或遥测
-- 发送请求时，数据会直接发往用户选择的 AI 提供方
-
-如果未来引入后端、账号系统、遥测或新的数据用途，本页面应同步更新。
