@@ -1,6 +1,6 @@
 # IChat
 
-![IChat logotype](assets/icon.svg)
+<img src="assets/icon.svg" alt="" width="320" />
 
 IChat is a Chrome side panel extension for context-aware AI chat.
 It helps you capture context from the current web page and send it to your selected AI provider without leaving the browser.
