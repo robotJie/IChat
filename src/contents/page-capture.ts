@@ -39,6 +39,7 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
   const CAPTURE_UI_ID = "ichat-flow-capture-ui";
   const CAPTURE_STYLE_ID = "ichat-flow-capture-style";
   const DEBUG_CAPTURE = true;
+  const MANUAL_OVERRIDE_RELEASE_DISTANCE_PX = 32;
 
   function debugCapture(stage, payload) {
     if (!DEBUG_CAPTURE) {
@@ -127,6 +128,28 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
       : null;
   }
 
+  function getActiveCandidateRect(session) {
+    const candidate = session?.trail?.[session.activeIndex];
+    return candidate?.rect || null;
+  }
+
+  function isPointInsideRect(x, y, rect) {
+    if (!rect) {
+      return false;
+    }
+
+    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+  }
+
+  function hasMovedBeyondManualOverrideReleaseDistance(session, x, y) {
+    if (!session?.manualOverrideAnchor) {
+      return true;
+    }
+
+    const deltaX = x - session.manualOverrideAnchor.x;
+    const deltaY = y - session.manualOverrideAnchor.y;
+    return Math.hypot(deltaX, deltaY) > MANUAL_OVERRIDE_RELEASE_DISTANCE_PX;
+  }
   window.addEventListener("pointermove", handlePointerMove, true);
   window.addEventListener("mousemove", handlePointerMove, true);
   window.addEventListener("keydown", handleKeydown, true);
@@ -191,6 +214,20 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
 
     if (!state.captureSession) {
       return;
+    }
+
+    if (state.captureSession.manualOverride) {
+      const activeRect = getActiveCandidateRect(state.captureSession);
+      const pointerInsideActiveRect = isPointInsideRect(event.clientX, event.clientY, activeRect);
+      const movedBeyondReleaseDistance = hasMovedBeyondManualOverrideReleaseDistance(state.captureSession, event.clientX, event.clientY);
+
+      if (pointerInsideActiveRect || !movedBeyondReleaseDistance) {
+        scheduleAutoCommit(2600);
+        return;
+      }
+
+      state.captureSession.manualOverride = false;
+      state.captureSession.manualOverrideAnchor = null;
     }
 
     if (state.captureSession.pointerTarget === event.target) {
@@ -277,6 +314,10 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
     }
 
     session.manualOverride = true;
+    session.manualOverrideAnchor = {
+      x: state.lastPointer.x,
+      y: state.lastPointer.y
+    };
     renderSessionHighlight();
     scheduleAutoCommit(2600);
   }
@@ -341,6 +382,7 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
       activeIndex: pickBestCandidateIndex(trail, seedElement),
       pointerTarget: seedElement,
       manualOverride: false,
+      manualOverrideAnchor: null,
       timer: null
     };
 
@@ -369,6 +411,7 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
     state.captureSession.trail = trail;
     state.captureSession.pointerTarget = seedElement;
     state.captureSession.manualOverride = false;
+    state.captureSession.manualOverrideAnchor = null;
     state.captureSession.activeIndex = pickBestCandidateIndex(trail, seedElement);
     renderSessionHighlight();
     scheduleAutoCommit(3000);
@@ -659,7 +702,7 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
         }
 
         #${CAPTURE_UI_ID} .ichat-action::before {
-          content: "·";
+          content: "\u00B7";
           margin-right: 8px;
           color: rgba(196, 247, 255, 0.42);
         }
