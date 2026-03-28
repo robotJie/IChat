@@ -150,6 +150,8 @@ export const enCatalog = {
   "capture.smart.subtitle": "Scroll to resize | Left click confirm | Esc cancel",
   "capture.flash.title": "IChat Captured",
   "capture.flash.selection": "Selection + implicit context",
+  "capture.selection.clear": "Clear selection",
+  "capture.selection.cleared": "Selection cleared. The next capture will use Smart Capture.",
   "capture.flash.smartImage": "Smart image context",
   "capture.flash.smartVideo": "Smart video context",
   "capture.flash.smartDom": "Smart DOM context",

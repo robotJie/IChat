@@ -31,6 +31,7 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
     },
     captureSession: null,
     flashTimer: null,
+    overlayActionHandler: null,
     suppressPrimaryActivationUntil: 0,
     locale: "en" as SupportedLocale
   };
@@ -351,7 +352,7 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
     });
 
     renderSessionHighlight();
-    scheduleAutoCommit(1800);
+    scheduleAutoCommit(3000);
   }
 
   function refreshCaptureSession(seedElement) {
@@ -370,7 +371,7 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
     state.captureSession.manualOverride = false;
     state.captureSession.activeIndex = pickBestCandidateIndex(trail, seedElement);
     renderSessionHighlight();
-    scheduleAutoCommit(1800);
+    scheduleAutoCommit(3000);
   }
 
   function renderSessionHighlight() {
@@ -471,7 +472,25 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
       return;
     }
 
-    flashRect(rect, t("capture.flash.title"), t("capture.flash.selection"));
+    const hasSelection = hasActiveSelection();
+
+    flashRect(
+      rect,
+      t("capture.flash.title"),
+      t("capture.flash.selection"),
+      hasSelection
+        ? {
+            durationMs: 3200,
+            actionLabel: t("capture.selection.clear"),
+            onAction: () => {
+              clearPageSelection();
+              flashRect(rect, t("capture.flash.title"), t("capture.selection.cleared"), {
+                durationMs: 1200
+              });
+            }
+          }
+        : undefined
+    );
   }
 
   async function syncCaptureLocale() {
@@ -487,12 +506,12 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
     return translate(state.locale, key)
   }
 
-  function flashRect(rect, title, subtitle) {
-    showHighlight(rect, title, subtitle);
+  function flashRect(rect, title, subtitle, options = {}) {
+    showHighlight(rect, title, subtitle, options);
     clearFlashTimer();
     state.flashTimer = setTimeout(() => {
       hideHighlight();
-    }, 1100);
+    }, options.durationMs || 1100);
   }
 
   function clearFlashTimer() {
@@ -572,6 +591,9 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
         }
 
         #${CAPTURE_UI_ID} .ichat-label {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
           min-width: 220px;
           max-width: min(360px, calc(100vw - 24px));
           padding: 10px 14px;
@@ -581,6 +603,7 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
           border: 1px solid rgba(170, 238, 255, 0.2);
           box-shadow: 0 18px 40px rgba(5, 12, 24, 0.24);
           backdrop-filter: blur(18px);
+          pointer-events: auto;
         }
 
         #${CAPTURE_UI_ID} .ichat-title {
@@ -591,11 +614,59 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
           color: rgba(196, 247, 255, 0.92);
         }
 
-        #${CAPTURE_UI_ID} .ichat-subtitle {
+        #${CAPTURE_UI_ID} .ichat-subtitle-row {
+          display: flex;
+          align-items: baseline;
+          gap: 8px;
           margin-top: 4px;
+          min-width: 0;
+        }
+
+        #${CAPTURE_UI_ID} .ichat-subtitle {
+          min-width: 0;
           font-size: 12px;
           line-height: 1.45;
           color: rgba(234, 244, 255, 0.84);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          flex: 1 1 auto;
+        }
+
+        #${CAPTURE_UI_ID} .ichat-actions {
+          display: none;
+          flex: 0 0 auto;
+          align-items: center;
+        }
+
+        #${CAPTURE_UI_ID} .ichat-actions[data-visible="true"] {
+          display: inline-flex;
+        }
+
+        #${CAPTURE_UI_ID} .ichat-action {
+          appearance: none;
+          border: 0;
+          background: transparent;
+          color: rgba(196, 247, 255, 0.78);
+          font-size: 11px;
+          line-height: 1.45;
+          padding: 0;
+          cursor: pointer;
+          text-decoration: none;
+          transition: color 160ms ease, opacity 160ms ease;
+          opacity: 0.88;
+          white-space: nowrap;
+        }
+
+        #${CAPTURE_UI_ID} .ichat-action::before {
+          content: "·";
+          margin-right: 8px;
+          color: rgba(196, 247, 255, 0.42);
+        }
+
+        #${CAPTURE_UI_ID} .ichat-action:hover {
+          color: rgba(225, 251, 255, 0.96);
+          opacity: 1;
         }
 
         @keyframes ichatHaloPulse {
@@ -644,7 +715,12 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
       <div class="ichat-sheen"></div>
       <div class="ichat-label">
         <div class="ichat-title"></div>
-        <div class="ichat-subtitle"></div>
+        <div class="ichat-subtitle-row">
+          <div class="ichat-subtitle"></div>
+          <div class="ichat-actions" data-visible="false">
+            <button type="button" class="ichat-action"></button>
+          </div>
+        </div>
       </div>
     `;
 
@@ -657,30 +733,57 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
       sheen: root.querySelector(".ichat-sheen"),
       label: root.querySelector(".ichat-label"),
       title: root.querySelector(".ichat-title"),
-      subtitle: root.querySelector(".ichat-subtitle")
+      subtitle: root.querySelector(".ichat-subtitle"),
+      actions: root.querySelector(".ichat-actions"),
+      actionButton: root.querySelector(".ichat-action")
     };
+
+    state.overlay.actionButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (typeof state.overlayActionHandler === "function") {
+        state.overlayActionHandler();
+      }
+    });
 
     return state.overlay;
   }
 
-  function showHighlight(rect, title, subtitle) {
+  function showHighlight(rect, title, subtitle, options = {}) {
     const ui = ensureCaptureUi();
     const padding = 8;
-    const x = Math.max(6, rect.left - padding);
-    const y = Math.max(6, rect.top - padding);
-    const width = Math.max(40, rect.width + padding * 2);
-    const height = Math.max(24, rect.height + padding * 2);
-    const labelHeight = 54;
-    const labelTop = y > 84 ? y - 64 : y + height + 10;
-    const labelLeft = Math.min(Math.max(8, x), Math.max(8, window.innerWidth - 372));
+    const viewportMargin = 6;
+    const clampedLeft = clamp(rect.left - padding, viewportMargin, window.innerWidth - viewportMargin);
+    const clampedTop = clamp(rect.top - padding, viewportMargin, window.innerHeight - viewportMargin);
+    const clampedRight = clamp(rect.left + rect.width + padding, viewportMargin, window.innerWidth - viewportMargin);
+    const clampedBottom = clamp(rect.top + rect.height + padding, viewportMargin, window.innerHeight - viewportMargin);
+    const x = Math.min(clampedLeft, clampedRight - 40);
+    const y = Math.min(clampedTop, clampedBottom - 24);
+    const width = Math.max(40, clampedRight - x);
+    const height = Math.max(24, clampedBottom - y);
+    const hasAction = Boolean(options.actionLabel && typeof options.onAction === "function");
+    const labelHeight = hasAction ? 60 : 54;
+    const labelWidth = Math.min(360, Math.max(220, window.innerWidth - 16));
+    const preferredAboveTop = y - labelHeight - 10;
+    const preferredBelowTop = y + height + 10;
+    const labelTop = clamp(
+      preferredAboveTop >= 8 ? preferredAboveTop : preferredBelowTop,
+      8,
+      Math.max(8, window.innerHeight - labelHeight - 8)
+    );
+    const labelLeft = clamp(x, 8, Math.max(8, window.innerWidth - labelWidth - 8));
 
     applyBox(ui.halo, x - 8, y - 8, width + 16, height + 16);
     applyBox(ui.box, x, y, width, height);
     applyBox(ui.sheen, x, y, width, height);
-    applyBox(ui.label, labelLeft, labelTop, Math.min(360, window.innerWidth - 16), labelHeight);
+    applyBox(ui.label, labelLeft, labelTop, labelWidth, labelHeight);
 
     ui.title.textContent = title;
     ui.subtitle.textContent = subtitle;
+    ui.actions.dataset.visible = hasAction ? "true" : "false";
+    ui.actionButton.textContent = hasAction ? options.actionLabel : "";
+    state.overlayActionHandler = hasAction ? options.onAction : null;
     ui.root.dataset.visible = "true";
   }
 
@@ -691,6 +794,9 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
       return;
     }
 
+    state.overlayActionHandler = null;
+    ui.actions.dataset.visible = "false";
+    ui.actionButton.textContent = "";
     ui.root.dataset.visible = "false";
   }
 
@@ -705,9 +811,30 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
     element.style.height = `${height}px`;
   }
 
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+
   function isCaptureUiElement(target) {
     return Boolean(target && target instanceof Element && target.closest(`#${CAPTURE_UI_ID}`));
   }
+
+  function hasActiveSelection() {
+    const selection = window.getSelection?.();
+    return Boolean(selection && selection.rangeCount > 0 && !selection.isCollapsed && selection.toString().trim());
+  }
+
+  function clearPageSelection() {
+    const selection = window.getSelection?.();
+    selection?.removeAllRanges();
+
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
+      const end = activeElement.selectionEnd ?? activeElement.value.length;
+      activeElement.setSelectionRange(end, end);
+    }
+  }
+
   async function fetchPageAsset(url) {
     if (!url || typeof url !== "string") {
       throw new Error("No page asset URL was provided")
