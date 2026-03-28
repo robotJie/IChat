@@ -18,6 +18,13 @@ Example scenario:
 
 ![](./assets/sample.png)
 
+There are two main capture paths in IChat:
+
+- Selection capture:
+  Select the text you care about first, then press `Ctrl+Shift+Y` (the default shortcut) to capture the selected text together with nearby implicit context.
+- Smart capture:
+  Press `Ctrl+Shift+Y` (the default shortcut) to trigger context capture, and the highlighted target updates as your mouse moves. If the result is not what you want, use the mouse wheel to adjust the capture scope, or press `Esc` to cancel.
+
 ## Current Capabilities
 
 - selection-first capture
@@ -30,6 +37,16 @@ Example scenario:
 ## How To Use IChat
 
 ### 1. Load / Install The Extension
+
+From GitHub Releases:
+
+1. open the [Releases](https://github.com/robotJie/IChat/releases) page
+2. download the latest `ichat-chrome-mv3-prod-<version>.zip`
+3. extract the zip to a local folder
+4. open `chrome://extensions/`
+5. enable Developer mode
+6. choose **Load unpacked**
+7. select the extracted extension folder
 
 For local development:
 
