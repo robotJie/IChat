@@ -18,6 +18,7 @@
                  ],
     "author":  "",
     "license":  "ISC",
+    "packageManager":  "npm@11.9.0",
     "dependencies":  {
                          "@ai-sdk/anthropic":  "^3.0.58",
                          "@ai-sdk/google":  "^3.0.43",
