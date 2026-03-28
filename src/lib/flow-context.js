@@ -1,6 +1,7 @@
 const MAX_TEXT_LENGTH = 6000;
 const MIN_CANDIDATE_TEXT_LENGTH = 24;
 const MAX_NEARBY_TEXT_LENGTH = 1200;
+const MAX_SMART_CAPTURE_DEPTH = 9;
 const NOISE_TAGS = new Set([
   "A",
   "BUTTON",
@@ -558,6 +559,35 @@ function createMediaCandidate(element, depth, attachment) {
   return candidate;
 }
 
+function depthPenalty(depth, kind) {
+  if (depth <= 2) {
+    return 0;
+  }
+
+  const adjustedDepth = depth - 2;
+  if (kind === "text") {
+    return Math.round(adjustedDepth * adjustedDepth * 1.4 + adjustedDepth * 1.5);
+  }
+
+  return Math.round(adjustedDepth * adjustedDepth * 0.65 + adjustedDepth);
+}
+
+function textContainerPenalty(areaRatio) {
+  if (areaRatio > 0.88) {
+    return 52;
+  }
+
+  if (areaRatio > 0.72) {
+    return 34;
+  }
+
+  if (areaRatio > 0.55) {
+    return 18;
+  }
+
+  return 0;
+}
+
 function scoreTextCandidate(candidate) {
   const tagName = candidate.element.tagName;
   const rect = candidate.rect;
@@ -588,15 +618,8 @@ function scoreTextCandidate(candidate) {
     score -= 8;
   }
 
-  if (areaRatio > 0.82) {
-    score -= 40;
-  } else if (areaRatio > 0.55) {
-    score -= 18;
-  }
-
-  if (candidate.depth > 8) {
-    score -= Math.min(12, candidate.depth);
-  }
+  score -= textContainerPenalty(areaRatio);
+  score -= depthPenalty(candidate.depth, "text");
 
   return score;
 }
@@ -627,13 +650,13 @@ function scoreImageCandidate(candidate, attachment) {
 
   score += Math.min(32, areaRatio * 140);
 
-  if (areaRatio > 0.88) {
-    score -= 24;
+  if (areaRatio > 0.90) {
+    score -= 18;
+  } else if (areaRatio > 0.78) {
+    score -= 10;
   }
 
-  if (candidate.depth > 8) {
-    score -= Math.min(10, candidate.depth);
-  }
+  score -= depthPenalty(candidate.depth, "image");
 
   return score;
 }
@@ -832,7 +855,7 @@ function collectSmartTrail(startElement) {
     current = current.parentElement;
     depth += 1;
 
-    if (depth > 14) {
+    if (depth > MAX_SMART_CAPTURE_DEPTH) {
       break;
     }
   }
