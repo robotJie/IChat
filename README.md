@@ -12,6 +12,8 @@ It helps you capture context from the current web page and send it to your selec
 - open a native side panel chat for follow-up questions
 - support BYOK setup for OpenAI-compatible providers, Gemini, and Anthropic
 
+<img src="docs/assets/sample.png" alt="" width="600" />
+
 ## Install
 
 ### Load unpacked in Chrome
