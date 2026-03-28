@@ -215,15 +215,6 @@ export function IChatApp({ viewMode }: IChatAppProps) {
     await navigator.clipboard.writeText(promptPreview)
   }
 
-  const handleCopySystemInstructions = async () => {
-    const systemInstructions = appState.settings.context.systemInstructions
-    if (!systemInstructions) {
-      return
-    }
-
-    await navigator.clipboard.writeText(systemInstructions)
-  }
-
   const handleSendCurrentContext = async () => {
     if (!appState.flowContext) {
       return
@@ -342,7 +333,6 @@ export function IChatApp({ viewMode }: IChatAppProps) {
             onOpenAIEndpointChange={(value) => void handleOpenAIEndpointChange(value)}
             onSettingsChange={(partial) => void handleSettingsChange(partial)}
             onCopyPrompt={() => void handleCopyPrompt()}
-            onCopySystemInstructions={() => void handleCopySystemInstructions()}
             onSendCurrentContext={() => void handleSendCurrentContext()}
             onClearThread={() => void handleClearThread()}
             onResetContext={() => void handleResetContext()}

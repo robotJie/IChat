@@ -18,7 +18,6 @@ interface SettingsWorkspaceProps {
   onOpenAIEndpointChange: (value: string) => void | Promise<void>
   onSettingsChange: (partial: IChatSettingsUpdate) => void | Promise<void>
   onCopyPrompt: () => void | Promise<void>
-  onCopySystemInstructions: () => void | Promise<void>
   onSendCurrentContext: () => void | Promise<void>
   onClearThread: () => void | Promise<void>
   onResetContext: () => void | Promise<void>
@@ -452,7 +451,6 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     onOpenAIEndpointChange,
     onSettingsChange,
     onCopyPrompt,
-    onCopySystemInstructions,
     onSendCurrentContext,
     onClearThread,
     onResetContext
@@ -462,6 +460,8 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const [commandBindings, setCommandBindings] = useState<CommandBindingSummary[]>([])
   const [expandedProvider, setExpandedProvider] = useState<ProviderId | null>(null)
   const [feedbackCopied, setFeedbackCopied] = useState(false)
+  const [systemInstructionsDraft, setSystemInstructionsDraft] = useState(appState.settings.context.systemInstructions)
+  const [savingSystemInstructions, setSavingSystemInstructions] = useState(false)
 
   const workspaceRef = useRef<HTMLElement | null>(null)
   const backButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -478,6 +478,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const shortcutLabel = primaryBinding?.shortcut || t("settings.shortcuts.notSet")
   const threadCount = appState.chatThreads[activeProvider]?.length ?? 0
   const contextMode = flowContext ? getFlowContextMode(flowContext) : null
+  const systemInstructionsDirty = systemInstructionsDraft !== settings.context.systemInstructions
 
   const openExternalUrl = async (url: string) => {
     await chrome.tabs.create({
@@ -500,6 +501,29 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
       setFeedbackCopied(false)
       feedbackCopyTimerRef.current = null
     }, 1600)
+  }
+
+  const handleCopySystemInstructions = async () => {
+    if (!systemInstructionsDraft) {
+      return
+    }
+
+    await navigator.clipboard.writeText(systemInstructionsDraft)
+  }
+
+  const handleSaveSystemInstructions = async () => {
+    setSavingSystemInstructions(true)
+
+    try {
+      await onSettingsChange({
+        context: {
+          systemInstructions: systemInstructionsDraft,
+          systemInstructionsCustomized: true
+        }
+      })
+    } finally {
+      setSavingSystemInstructions(false)
+    }
   }
 
   const contextCards = useMemo(() => {
@@ -670,6 +694,10 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     }
   }, [])
 
+  useEffect(() => {
+    setSystemInstructionsDraft(settings.context.systemInstructions)
+  }, [settings.context.systemInstructions])
+
   const renderActiveSection = () => {
     if (activeSection === "general") {
       return (
@@ -806,19 +834,19 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
             <textarea
               className="ichat-context-editor-textarea"
               rows={8}
-              value={settings.context.systemInstructions}
-              onChange={(event) =>
-                void onSettingsChange({
-                  context: {
-                    systemInstructions: event.target.value,
-                    systemInstructionsCustomized: true
-                  }
-                })
-              }
+              value={systemInstructionsDraft}
+              onChange={(event) => setSystemInstructionsDraft(event.target.value)}
             />
             <div className="ichat-settings-inline-actions">
-              <button className="ichat-secondary-button" type="button" onClick={onCopySystemInstructions}>
+              <button className="ichat-secondary-button" type="button" onClick={() => void handleCopySystemInstructions()}>
                 {t("settings.context.systemInstructions.copy")}
+              </button>
+              <button
+                className="ichat-primary-button"
+                type="button"
+                disabled={!systemInstructionsDirty || savingSystemInstructions}
+                onClick={() => void handleSaveSystemInstructions()}>
+                {t("settings.context.systemInstructions.save")}
               </button>
               <button
                 className="ichat-secondary-button"

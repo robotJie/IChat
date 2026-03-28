@@ -66,6 +66,7 @@ export const enCatalog = {
   "settings.context.systemInstructions.label": "FlowContext system instructions",
   "settings.context.systemInstructions.description": "These instructions are sent as the system message for FlowContext-driven chats. Editing them directly changes model behavior.",
   "settings.context.systemInstructions.copy": "Copy",
+  "settings.context.systemInstructions.save": "Save",
   "settings.context.systemInstructions.restoreDefault": "Restore default",
   "settings.context.inspect.title": "Inspect FlowContext",
   "settings.context.inspect.description": "Review the captured blocks, page metadata, and the exact user prompt preview before sending.",

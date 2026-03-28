@@ -69,6 +69,7 @@ export const zhCNCatalog = {
   "settings.context.systemInstructions.label": "FlowContext 系统指令",
   "settings.context.systemInstructions.description": "这些指令会作为 FlowContext 对话的 system message 发送，直接修改会影响模型行为。",
   "settings.context.systemInstructions.restoreDefault": "恢复默认值",
+  "settings.context.systemInstructions.save": "保存",
   "settings.context.inspect.title": "检查 FlowContext",
   "settings.context.inspect.description": "发送前查看已捕获的区块、页面元数据，以及将要发送的准确用户提示预览。",
   "settings.context.summary.captureMode": "捕获模式",
