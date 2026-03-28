@@ -183,6 +183,13 @@ if (!captureScope.__ICHAT_PAGE_CAPTURE_READY__) {
       return true;
     }
 
+    if (message.type === "ICHAT_CANCEL_CAPTURE") {
+      const hadActiveSession = Boolean(state.captureSession)
+      cancelCaptureSession(true)
+      sendResponse({ ok: true, cancelled: hadActiveSession })
+      return false;
+    }
+
     if (message.type === "ICHAT_FETCH_PAGE_ASSET") {
       Promise.resolve(fetchPageAsset(message.payload && message.payload.url))
         .then((result) => sendResponse({ ok: true, ...result }))

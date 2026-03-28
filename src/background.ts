@@ -101,6 +101,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true
   }
 
+  if (message.type === "ICHAT_CANCEL_CAPTURE") {
+    handleCancelCapture()
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error: Error) => sendResponse({ ok: false, error: error.message }))
+    return true
+  }
+
   if (message.type === "ICHAT_GET_APP_STATE") {
     getAppState()
       .then((state) => sendResponse({ ok: true, state }))
@@ -143,7 +150,7 @@ function openSidePanelForGesture() {
 
 async function handleCaptureCommand() {
   await ensureDefaults()
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  const tab = await getActiveCaptureTab()
 
   if (!tab?.id || !isNormalWebPage(tab.url)) {
     await Promise.all([
@@ -178,6 +185,25 @@ async function handleCaptureCommandError(error: unknown) {
   const normalizedError = toUserFacingCaptureError(error)
   console.debug("IChat capture command failed", normalizedError)
   await handleCaptureFailure(normalizedError.message)
+}
+
+async function getActiveCaptureTab() {
+  const tabs = await chrome.tabs.query({ active: true, windowId: lastWindowId })
+  const [tab] = tabs.length > 0 ? tabs : await chrome.tabs.query({ active: true, currentWindow: true })
+  return tab ?? null
+}
+
+async function handleCancelCapture() {
+  const tab = await getActiveCaptureTab()
+
+  if (!tab?.id || !isNormalWebPage(tab.url)) {
+    return { cancelled: false }
+  }
+
+  await ensureContentScriptInjected(tab.id)
+  await pingPage(tab.id)
+  const response = await chrome.tabs.sendMessage(tab.id, { type: "ICHAT_CANCEL_CAPTURE" })
+  return { cancelled: Boolean(response?.cancelled) }
 }
 
 async function pingPage(tabId: number) {

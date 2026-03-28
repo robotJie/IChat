@@ -158,6 +158,19 @@ export function IChatApp({ viewMode }: IChatAppProps) {
     wasSettingsOpenRef.current = settingsOpen
   }, [settingsOpen])
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || appState.captureStatus.state !== "capturing") {
+        return
+      }
+
+      void chrome.runtime.sendMessage({ type: "ICHAT_CANCEL_CAPTURE" }).catch(() => {})
+    }
+
+    window.addEventListener("keydown", handleKeyDown, true)
+    return () => window.removeEventListener("keydown", handleKeyDown, true)
+  }, [appState.captureStatus.state])
+
   const activeProvider = getActiveProvider(appState.settings)
   const currentPendingPrompt = appState.pendingPrompt
   const pendingState = currentPendingPrompt && currentPendingPrompt.flowContextId === appState.flowContext?.id ? currentPendingPrompt.status : null
