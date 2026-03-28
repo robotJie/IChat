@@ -18,12 +18,42 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 1
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
+      - name: Debug workflow context
+        run: |
+          echo "event_name=${GITHUB_EVENT_NAME}"
+          echo "ref=${GITHUB_REF}"
+          echo "ref_name=${GITHUB_REF_NAME}"
+          echo "sha=${GITHUB_SHA}"
+          echo "runner_os=${RUNNER_OS}"
+          echo "node_version=$(node --version)"
+          echo "npm_version=$(npm --version)"
+
+      - name: Debug checked out revision
+        run: |
+          git rev-parse HEAD
+          git log --oneline --decorate -n 5
+          git status --short
+          git tag --points-at HEAD || true
+
+      - name: Debug dependency manifests
+        run: |
+          node -e "const pkg=require('./package.json'); console.log('package.json dependencies.react =', pkg.dependencies?.react); console.log('package.json dependencies.react-dom =', pkg.dependencies?.['react-dom']);"
+          node -e "const lock=require('./package-lock.json'); const root=lock.packages?.[''] ?? {}; console.log('package-lock.json root dependencies.react =', root.dependencies?.react); console.log('package-lock.json root dependencies.react-dom =', root.dependencies?.['react-dom']);"
+          node -e "const fs=require('fs'); const text=fs.readFileSync('package-lock.json','utf8'); console.log('lock contains react@18.3.1 =', text.includes('18.3.1')); console.log('lock contains scheduler@0.23.2 =', text.includes('0.23.2')); console.log('lock contains loose-envify@1.4.0 =', text.includes('1.4.0'));"
+          echo "package.json"
+          cat package.json
+          echo "package-lock.json (first 80 lines)"
+          sed -n '1,80p' package-lock.json
 
       - name: Install dependencies
         run: npm ci
