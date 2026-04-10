@@ -356,7 +356,7 @@ export function normalizeSettings(value: unknown): IChatSettings {
   }
 }
 
-function normalizeApiKeys(value: unknown): IChatApiKeys {
+export function normalizeApiKeys(value: unknown): IChatApiKeys {
   const apiKeys = isRecord(value) ? value : {}
 
   return {

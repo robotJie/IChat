@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { getActiveProvider, getFlowContextMode, getProviderModel, isAutoSendEnabled, providerLabels } from "../lib/prompt-builder"
+import { getDefaultFlowContextSystemInstructionsForSettings } from "../lib/flowcontext-system-instructions"
 import { useI18n } from "../lib/i18n"
 import type { AppState, FlowContext, IChatSettingsUpdate, ProviderId, UiLanguage } from "../lib/types"
 
@@ -16,6 +17,8 @@ interface SettingsWorkspaceProps {
   onModelChange: (provider: ProviderId, model: string) => void | Promise<void>
   onApiKeyChange: (provider: ProviderId, value: string) => void | Promise<void>
   onOpenAIEndpointChange: (value: string) => void | Promise<void>
+  onHistoryMessageLimitChange: (value: number) => void | Promise<void>
+  onSystemInstructionsChange: (value: string) => void | Promise<void>
   onSettingsChange: (partial: IChatSettingsUpdate) => void | Promise<void>
   onCopyPrompt: () => void | Promise<void>
   onSendCurrentContext: () => void | Promise<void>
@@ -279,6 +282,122 @@ function SegmentedControl<T extends string>(props: {
   )
 }
 
+function usePersistedTextDraft(
+  value: string,
+  onPersist: (nextValue: string) => void | Promise<void>,
+  delayMs = 250,
+  syncOnValueChange = true
+) {
+  const [draft, setDraft] = useState(value)
+  const [committedValue, setCommittedValue] = useState(value)
+  const timeoutRef = useRef<number | null>(null)
+  const persistRef = useRef(onPersist)
+
+  useEffect(() => {
+    persistRef.current = onPersist
+  }, [onPersist])
+
+  useEffect(() => {
+    if (!syncOnValueChange) {
+      return
+    }
+
+    setCommittedValue(value)
+    setDraft((current) => (current === value ? current : value))
+  }, [syncOnValueChange, value])
+
+  useEffect(() => {
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+
+    if (draft === committedValue) {
+      return
+    }
+
+    const valueToPersist = draft
+    timeoutRef.current = window.setTimeout(() => {
+      timeoutRef.current = null
+      if (valueToPersist !== committedValue) {
+        void Promise.resolve(persistRef.current(valueToPersist))
+          .then(() => {
+            setCommittedValue((current) => (current === valueToPersist ? current : valueToPersist))
+          })
+          .catch(() => {})
+      }
+    }, delayMs)
+
+    return () => {
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+    }
+  }, [committedValue, delayMs, draft])
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
+
+  const flushDraft = (nextValue?: string) => {
+    const valueToPersist = nextValue ?? draft
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+
+    if (valueToPersist === committedValue) {
+      return
+    }
+
+    void Promise.resolve(persistRef.current(valueToPersist))
+      .then(() => {
+        setCommittedValue((current) => (current === valueToPersist ? current : valueToPersist))
+      })
+      .catch(() => {})
+  }
+
+  const resetDraft = (nextValue?: string) => {
+    const resetValue = nextValue ?? value
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+
+    setCommittedValue(resetValue)
+    setDraft(resetValue)
+  }
+
+  return {
+    draft,
+    setDraft,
+    flushDraft,
+    resetDraft
+  }
+}
+
+function usePersistedNumberDraft(
+  value: number,
+  onPersist: (nextValue: number) => void | Promise<void>,
+  normalizeValue: (draftValue: string, currentValue: number) => number,
+  delayMs = 250,
+  syncOnValueChange = true
+) {
+  const textDraft = usePersistedTextDraft(String(value), (nextValue) => onPersist(normalizeValue(nextValue, value)), delayMs, syncOnValueChange)
+
+  return {
+    draft: textDraft.draft,
+    setDraft: textDraft.setDraft,
+    flushDraft: () => textDraft.flushDraft(),
+    resetDraft: () => textDraft.resetDraft(String(value))
+  }
+}
+
 function ProviderCard(props: {
   provider: ProviderId
   activeProvider: ProviderId
@@ -296,6 +415,9 @@ function ProviderCard(props: {
   const { provider, activeProvider, expanded, onToggle, apiKey, modelId, openaiEndpoint, onProviderChange, onModelChange, onApiKeyChange, onOpenAIEndpointChange } = props
   const help = getProviderHelp(t)[provider]
   const isActive = provider === activeProvider
+  const apiKeyDraft = usePersistedTextDraft(apiKey, (nextValue) => onApiKeyChange(provider, nextValue), 250, false)
+  const modelIdDraft = usePersistedTextDraft(modelId, (nextValue) => onModelChange(provider, nextValue), 250, false)
+  const openaiEndpointDraft = usePersistedTextDraft(openaiEndpoint, onOpenAIEndpointChange, 250, false)
 
   return (
     <article className={`ichat-settings-provider-card ${isActive ? "is-active" : ""} ${expanded ? "is-expanded" : ""}`}>
@@ -326,9 +448,10 @@ function ProviderCard(props: {
               <input
                 className="ichat-settings-input"
                 type="password"
-                value={apiKey}
+                value={apiKeyDraft.draft}
                 placeholder={help.keyPlaceholder}
-                onChange={(event) => void onApiKeyChange(provider, event.target.value)}
+                onChange={(event) => apiKeyDraft.setDraft(event.target.value)}
+                onBlur={() => apiKeyDraft.flushDraft()}
               />
             </label>
             <label className="ichat-settings-field">
@@ -336,8 +459,9 @@ function ProviderCard(props: {
               <input
                 className="ichat-settings-input"
                 type="text"
-                value={modelId}
-                onChange={(event) => void onModelChange(provider, event.target.value)}
+                value={modelIdDraft.draft}
+                onChange={(event) => modelIdDraft.setDraft(event.target.value)}
+                onBlur={() => modelIdDraft.flushDraft()}
               />
             </label>
             {provider === "openai" ? (
@@ -346,9 +470,10 @@ function ProviderCard(props: {
                 <input
                   className="ichat-settings-input"
                   type="text"
-                  value={openaiEndpoint}
+                  value={openaiEndpointDraft.draft}
                   placeholder={help.endpointPlaceholder}
-                  onChange={(event) => void onOpenAIEndpointChange(event.target.value)}
+                  onChange={(event) => openaiEndpointDraft.setDraft(event.target.value)}
+                  onBlur={() => openaiEndpointDraft.flushDraft()}
                 />
               </label>
             ) : null}
@@ -449,6 +574,8 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     onModelChange,
     onApiKeyChange,
     onOpenAIEndpointChange,
+    onHistoryMessageLimitChange,
+    onSystemInstructionsChange,
     onSettingsChange,
     onCopyPrompt,
     onSendCurrentContext,
@@ -460,8 +587,6 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const [commandBindings, setCommandBindings] = useState<CommandBindingSummary[]>([])
   const [expandedProvider, setExpandedProvider] = useState<ProviderId | null>(null)
   const [feedbackCopied, setFeedbackCopied] = useState(false)
-  const [systemInstructionsDraft, setSystemInstructionsDraft] = useState(appState.settings.context.systemInstructions)
-  const [savingSystemInstructions, setSavingSystemInstructions] = useState(false)
 
   const workspaceRef = useRef<HTMLElement | null>(null)
   const backButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -474,11 +599,34 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const autoSendEnabled = isAutoSendEnabled(settings)
   const displayedLocator = getDisplayedLocator(flowContext)
   const previewLength = settings.context.previewDensity === "full" ? 480 : 180
+  const defaultSystemInstructions = useMemo(
+    () => getDefaultFlowContextSystemInstructionsForSettings({ uiLanguage: settings.uiLanguage }),
+    [settings.uiLanguage]
+  )
   const primaryBinding = commandBindings.find((binding) => binding.name === "capture-flow-context") ?? null
   const shortcutLabel = primaryBinding?.shortcut || t("settings.shortcuts.notSet")
   const threadCount = appState.chatThreads[activeProvider]?.length ?? 0
   const contextMode = flowContext ? getFlowContextMode(flowContext) : null
-  const systemInstructionsDirty = systemInstructionsDraft !== settings.context.systemInstructions
+  const historyMessageLimitDraft = usePersistedNumberDraft(
+    settings.data.historyMessageLimit,
+    onHistoryMessageLimitChange,
+    (draftValue, currentValue) => {
+      const trimmed = draftValue.trim()
+      if (!trimmed) {
+        return currentValue
+      }
+
+      return clampHistoryMessageLimit(Number.parseInt(trimmed, 10))
+    },
+    250,
+    false
+  )
+  const systemInstructionsDraft = usePersistedTextDraft(
+    settings.context.systemInstructions,
+    onSystemInstructionsChange,
+    400,
+    false
+  )
 
   const openExternalUrl = async (url: string) => {
     await chrome.tabs.create({
@@ -504,26 +652,20 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   }
 
   const handleCopySystemInstructions = async () => {
-    if (!systemInstructionsDraft) {
+    if (!systemInstructionsDraft.draft) {
       return
     }
 
-    await navigator.clipboard.writeText(systemInstructionsDraft)
+    await navigator.clipboard.writeText(systemInstructionsDraft.draft)
   }
 
-  const handleSaveSystemInstructions = async () => {
-    setSavingSystemInstructions(true)
-
-    try {
-      await onSettingsChange({
-        context: {
-          systemInstructions: systemInstructionsDraft,
-          systemInstructionsCustomized: true
-        }
-      })
-    } finally {
-      setSavingSystemInstructions(false)
-    }
+  const handleRestoreDefaultSystemInstructions = async () => {
+    systemInstructionsDraft.resetDraft(defaultSystemInstructions)
+    await onSettingsChange({
+      context: {
+        systemInstructionsCustomized: false
+      }
+    })
   }
 
   const contextCards = useMemo(() => {
@@ -694,10 +836,6 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     }
   }, [])
 
-  useEffect(() => {
-    setSystemInstructionsDraft(settings.context.systemInstructions)
-  }, [settings.context.systemInstructions])
-
   const renderActiveSection = () => {
     if (activeSection === "general") {
       return (
@@ -729,14 +867,9 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
                   min={0}
                   max={100}
                   step={1}
-                  value={settings.data.historyMessageLimit}
-                  onChange={(event) =>
-                    void onSettingsChange({
-                      data: {
-                        historyMessageLimit: clampHistoryMessageLimit(Number.parseInt(event.target.value || "0", 10))
-                      }
-                    })
-                  }
+                  value={historyMessageLimitDraft.draft}
+                  onChange={(event) => historyMessageLimitDraft.setDraft(event.target.value)}
+                  onBlur={() => historyMessageLimitDraft.flushDraft()}
                 />
               }
             />
@@ -834,24 +967,18 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
             <textarea
               className="ichat-context-editor-textarea"
               rows={8}
-              value={systemInstructionsDraft}
-              onChange={(event) => setSystemInstructionsDraft(event.target.value)}
+              value={systemInstructionsDraft.draft}
+              onChange={(event) => systemInstructionsDraft.setDraft(event.target.value)}
+              onBlur={() => systemInstructionsDraft.flushDraft()}
             />
             <div className="ichat-settings-inline-actions">
               <button className="ichat-secondary-button" type="button" onClick={() => void handleCopySystemInstructions()}>
                 {t("settings.context.systemInstructions.copy")}
               </button>
               <button
-                className="ichat-primary-button"
-                type="button"
-                disabled={!systemInstructionsDirty || savingSystemInstructions}
-                onClick={() => void handleSaveSystemInstructions()}>
-                {t("settings.context.systemInstructions.save")}
-              </button>
-              <button
                 className="ichat-secondary-button"
                 type="button"
-                onClick={() => void onSettingsChange({ context: { systemInstructionsCustomized: false } })}>
+                onClick={() => void handleRestoreDefaultSystemInstructions()}>
                 {t("settings.context.systemInstructions.restoreDefault")}
               </button>
             </div>

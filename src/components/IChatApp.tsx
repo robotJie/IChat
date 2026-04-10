@@ -12,6 +12,7 @@ import {
 import {
   clearChatThread,
   getAppState,
+  normalizeApiKeys,
   normalizeFlowContext,
   normalizeSettings,
   setDispatchStatus,
@@ -56,6 +57,23 @@ interface IChatAppProps {
   viewMode: "sidepanel" | "tab"
 }
 
+function didOnlyProviderDraftSettingsChange(current: AppState["settings"], next: AppState["settings"]) {
+  return (
+    current.schemaVersion === next.schemaVersion &&
+    current.uiLanguage === next.uiLanguage &&
+    current.providers.active === next.providers.active &&
+    JSON.stringify(current.context) === JSON.stringify(next.context) &&
+    JSON.stringify(current.shortcuts) === JSON.stringify(next.shortcuts) &&
+    JSON.stringify(current.data) === JSON.stringify(next.data) &&
+    (
+      current.providers.openaiEndpoint !== next.providers.openaiEndpoint ||
+      current.providers.models.openai !== next.providers.models.openai ||
+      current.providers.models.gemini !== next.providers.models.gemini ||
+      current.providers.models.anthropic !== next.providers.models.anthropic
+    )
+  )
+}
+
 export function IChatApp({ viewMode }: IChatAppProps) {
   const [appState, setAppState] = useState<AppState>(INITIAL_STATE)
   const [threadClearSignals, setThreadClearSignals] = useState<Record<ProviderId, number>>({
@@ -67,9 +85,23 @@ export function IChatApp({ viewMode }: IChatAppProps) {
   const deferredFlowContext = useDeferredValue(appState.flowContext)
   const gearButtonRef = useRef<HTMLButtonElement | null>(null)
   const wasSettingsOpenRef = useRef(false)
+  const appStateRef = useRef(appState)
+  const settingsOpenRef = useRef(settingsOpen)
+  const suppressedStorageEchoRef = useRef({
+    settings: 0,
+    apiKeys: 0
+  })
   const locale = resolveLocale(appState.settings)
   const i18n = useMemo(() => createI18n(locale), [locale])
   const { t } = i18n
+
+  useEffect(() => {
+    appStateRef.current = appState
+  }, [appState])
+
+  useEffect(() => {
+    settingsOpenRef.current = settingsOpen
+  }, [settingsOpen])
 
   const promptPreview = useMemo(() => {
     if (!deferredFlowContext) {
@@ -91,6 +123,37 @@ export function IChatApp({ viewMode }: IChatAppProps) {
     })
   })
 
+  const consumeSuppressedStorageEcho = useEffectEvent((key: "settings" | "apiKeys") => {
+    if (suppressedStorageEchoRef.current[key] <= 0) {
+      return false
+    }
+
+    suppressedStorageEchoRef.current[key] -= 1
+    return true
+  })
+
+  const shouldMuteProviderDraftEcho = useEffectEvent((changes: Record<string, chrome.storage.StorageChange>) => {
+    if (!settingsOpenRef.current) {
+      return {
+        settings: false,
+        apiKeys: false
+      }
+    }
+
+    const currentState = appStateRef.current
+    const nextSettings = changes[STORAGE_KEYS.settings]
+      ? normalizeSettings(changes[STORAGE_KEYS.settings].newValue)
+      : null
+    const nextApiKeys = changes[STORAGE_KEYS.apiKeys]
+      ? normalizeApiKeys(changes[STORAGE_KEYS.apiKeys].newValue)
+      : null
+
+    return {
+      settings: nextSettings ? didOnlyProviderDraftSettingsChange(currentState.settings, nextSettings) : false,
+      apiKeys: nextApiKeys ? JSON.stringify(currentState.apiKeys) !== JSON.stringify(nextApiKeys) : false
+    }
+  })
+
   useEffect(() => {
     let mounted = true
 
@@ -108,17 +171,18 @@ export function IChatApp({ viewMode }: IChatAppProps) {
       }
 
       const patch: Partial<AppState> = {}
+      const mutedEcho = shouldMuteProviderDraftEcho(changes)
 
       if (changes[STORAGE_KEYS.flowContext]) {
         patch.flowContext = normalizeFlowContext(changes[STORAGE_KEYS.flowContext].newValue)
       }
 
-      if (changes[STORAGE_KEYS.settings]) {
+      if (changes[STORAGE_KEYS.settings] && !mutedEcho.settings && !consumeSuppressedStorageEcho("settings")) {
         patch.settings = normalizeSettings(changes[STORAGE_KEYS.settings].newValue)
       }
 
-      if (changes[STORAGE_KEYS.apiKeys]) {
-        patch.apiKeys = changes[STORAGE_KEYS.apiKeys].newValue as AppState["apiKeys"]
+      if (changes[STORAGE_KEYS.apiKeys] && !mutedEcho.apiKeys && !consumeSuppressedStorageEcho("apiKeys")) {
+        patch.apiKeys = normalizeApiKeys(changes[STORAGE_KEYS.apiKeys].newValue)
       }
 
       if (changes[STORAGE_KEYS.captureStatus]) {
@@ -148,11 +212,14 @@ export function IChatApp({ viewMode }: IChatAppProps) {
       mounted = false
       chrome.storage.onChanged.removeListener(handleStorageChange)
     }
-  }, [applyStoragePatch])
+  }, [applyStoragePatch, consumeSuppressedStorageEcho, shouldMuteProviderDraftEcho])
 
   useEffect(() => {
     if (!settingsOpen && wasSettingsOpenRef.current) {
       gearButtonRef.current?.focus()
+      void getAppState().then((state) => {
+        setAppState(state)
+      })
     }
 
     wasSettingsOpenRef.current = settingsOpen
@@ -195,25 +262,66 @@ export function IChatApp({ viewMode }: IChatAppProps) {
     })
   }
 
+  const runSuppressedSettingsUpdate = async (updateAction: () => Promise<void>) => {
+    suppressedStorageEchoRef.current.settings += 1
+    try {
+      await updateAction()
+    } catch (error) {
+      suppressedStorageEchoRef.current.settings = Math.max(0, suppressedStorageEchoRef.current.settings - 1)
+      throw error
+    }
+  }
+
   const handleModelChange = async (provider: ProviderId, model: string) => {
-    const models: Partial<Record<ProviderId, string>> = { [provider]: model }
-    await updateSettings({
-      providers: {
-        models
-      }
+    await runSuppressedSettingsUpdate(async () => {
+      const models: Partial<Record<ProviderId, string>> = { [provider]: model }
+      await updateSettings({
+        providers: {
+          models
+        }
+      })
     })
   }
 
   const handleOpenAIEndpointChange = async (value: string) => {
-    await updateSettings({
-      providers: {
-        openaiEndpoint: value
-      }
+    await runSuppressedSettingsUpdate(async () => {
+      await updateSettings({
+        providers: {
+          openaiEndpoint: value
+        }
+      })
     })
   }
 
   const handleApiKeyChange = async (provider: ProviderId, value: string) => {
-    await updateApiKeys({ [provider]: value })
+    suppressedStorageEchoRef.current.apiKeys += 1
+    try {
+      await updateApiKeys({ [provider]: value })
+    } catch (error) {
+      suppressedStorageEchoRef.current.apiKeys = Math.max(0, suppressedStorageEchoRef.current.apiKeys - 1)
+      throw error
+    }
+  }
+
+  const handleHistoryMessageLimitChange = async (value: number) => {
+    await runSuppressedSettingsUpdate(async () => {
+      await updateSettings({
+        data: {
+          historyMessageLimit: value
+        }
+      })
+    })
+  }
+
+  const handleSystemInstructionsChange = async (value: string) => {
+    await runSuppressedSettingsUpdate(async () => {
+      await updateSettings({
+        context: {
+          systemInstructions: value,
+          systemInstructionsCustomized: true
+        }
+      })
+    })
   }
 
   const handleSettingsChange = async (partial: IChatSettingsUpdate) => {
@@ -344,6 +452,8 @@ export function IChatApp({ viewMode }: IChatAppProps) {
             onModelChange={(provider, model) => void handleModelChange(provider, model)}
             onApiKeyChange={(provider, value) => void handleApiKeyChange(provider, value)}
             onOpenAIEndpointChange={(value) => void handleOpenAIEndpointChange(value)}
+            onHistoryMessageLimitChange={(value) => void handleHistoryMessageLimitChange(value)}
+            onSystemInstructionsChange={(value) => void handleSystemInstructionsChange(value)}
             onSettingsChange={(partial) => void handleSettingsChange(partial)}
             onCopyPrompt={() => void handleCopyPrompt()}
             onSendCurrentContext={() => void handleSendCurrentContext()}
