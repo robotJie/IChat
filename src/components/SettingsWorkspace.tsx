@@ -16,6 +16,7 @@ interface SettingsWorkspaceProps {
   onProviderChange: (provider: ProviderId) => void | Promise<void>
   onModelChange: (provider: ProviderId, model: string) => void | Promise<void>
   onApiKeyChange: (provider: ProviderId, value: string) => void | Promise<void>
+  onProviderSearchChange: (provider: ProviderId, enabled: boolean) => void | Promise<void>
   onOpenAIEndpointChange: (value: string) => void | Promise<void>
   onHistoryMessageLimitChange: (value: number) => void | Promise<void>
   onSystemInstructionsChange: (value: string) => void | Promise<void>
@@ -405,14 +406,30 @@ function ProviderCard(props: {
   onToggle: () => void
   apiKey: string
   modelId: string
+  searchEnabled: boolean
   openaiEndpoint: string
   onProviderChange: (provider: ProviderId) => void | Promise<void>
   onModelChange: (provider: ProviderId, model: string) => void | Promise<void>
   onApiKeyChange: (provider: ProviderId, value: string) => void | Promise<void>
+  onProviderSearchChange: (provider: ProviderId, enabled: boolean) => void | Promise<void>
   onOpenAIEndpointChange: (value: string) => void | Promise<void>
 }) {
   const { t } = useI18n()
-  const { provider, activeProvider, expanded, onToggle, apiKey, modelId, openaiEndpoint, onProviderChange, onModelChange, onApiKeyChange, onOpenAIEndpointChange } = props
+  const {
+    provider,
+    activeProvider,
+    expanded,
+    onToggle,
+    apiKey,
+    modelId,
+    searchEnabled,
+    openaiEndpoint,
+    onProviderChange,
+    onModelChange,
+    onApiKeyChange,
+    onProviderSearchChange,
+    onOpenAIEndpointChange
+  } = props
   const help = getProviderHelp(t)[provider]
   const isActive = provider === activeProvider
   const apiKeyDraft = usePersistedTextDraft(apiKey, (nextValue) => onApiKeyChange(provider, nextValue), 250, false)
@@ -477,6 +494,20 @@ function ProviderCard(props: {
                 />
               </label>
             ) : null}
+          </div>
+          <div className="ichat-settings-row">
+            <div className="ichat-settings-row-copy">
+              <strong>{t("settings.providers.search.label")}</strong>
+              <p>{t("settings.providers.search.description")}</p>
+            </div>
+            <div className="ichat-settings-row-control">
+              <button
+                className={`ichat-toggle ${searchEnabled ? "is-on" : ""}`}
+                type="button"
+                onClick={() => void onProviderSearchChange(provider, !searchEnabled)}>
+                {searchEnabled ? t("settings.providers.search.on") : t("settings.providers.search.off")}
+              </button>
+            </div>
           </div>
           {provider === "openai" && help.endpointNote ? <p>{help.endpointNote}</p> : null}
         </div>
@@ -573,6 +604,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     onProviderChange,
     onModelChange,
     onApiKeyChange,
+    onProviderSearchChange,
     onOpenAIEndpointChange,
     onHistoryMessageLimitChange,
     onSystemInstructionsChange,
@@ -915,10 +947,12 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
                 onToggle={() => setExpandedProvider((current) => (current === provider ? null : provider))}
                 apiKey={appState.apiKeys[provider]}
                 modelId={getProviderModel(settings, provider)}
+                searchEnabled={settings.providers.searchEnabled[provider]}
                 openaiEndpoint={settings.providers.openaiEndpoint}
                 onProviderChange={onProviderChange}
                 onModelChange={onModelChange}
                 onApiKeyChange={onApiKeyChange}
+                onProviderSearchChange={onProviderSearchChange}
                 onOpenAIEndpointChange={onOpenAIEndpointChange}
               />
             ))}

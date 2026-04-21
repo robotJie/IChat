@@ -202,6 +202,10 @@ export const zhCNCatalog = {
 
 zhCNCatalog["settings.providers.openai.note"] = "\u9002\u5408\u4f5c\u4e3a\u517c\u5bb9 OpenAI \u63a5\u53e3\u7684\u5e73\u8861\u578b\u9ed8\u8ba4\u804a\u5929\u6a21\u578b\u3002\u4f60\u4e5f\u53ef\u4ee5\u901a\u8fc7\u4e0b\u9762\u7684\u81ea\u5b9a\u4e49 endpoint\uff0c\u628a\u8fd9\u5f20\u5361\u6307\u5411\u4efb\u4f55 OpenAI-compatible \u63d0\u4f9b\u5546\u3002"
 zhCNCatalog["settings.providers.openai.endpointNote"] = "\u53ef\u9009\u3002\u7559\u7a7a\u8868\u793a\u5b98\u65b9 OpenAI\u3002\u82e5\u4f7f\u7528\u517c\u5bb9\u63d0\u4f9b\u5546\uff0c\u8bf7\u586b\u5199\u5b8c\u6574\u7684 base URL\uff0c\u901a\u5e38\u4ee5 /v1 \u7ed3\u5c3e\u3002"
+zhCNCatalog["settings.providers.search.label"] = "\u542f\u7528\u641c\u7d22"
+zhCNCatalog["settings.providers.search.description"] = "\u5141\u8bb8\u8be5\u63d0\u4f9b\u5546\u5728\u5f53\u524d\u6a21\u578b\u548c endpoint \u652f\u6301\u65f6\u4f7f\u7528\u5185\u5efa\u8054\u7f51\u641c\u7d22\u3002"
+zhCNCatalog["settings.providers.search.on"] = "\u5f00\u542f"
+zhCNCatalog["settings.providers.search.off"] = "\u5173\u95ed"
 zhCNCatalog["capture.smart.title"] = "IChat \u667a\u80fd\u6355\u83b7"
 zhCNCatalog["capture.smart.subtitle"] = "\u6eda\u8f6e\u5207\u6362\u8303\u56f4 | \u5de6\u952e\u786e\u8ba4 | Esc \u53d6\u6d88"
 zhCNCatalog["capture.flash.title"] = "IChat \u5df2\u6355\u83b7"

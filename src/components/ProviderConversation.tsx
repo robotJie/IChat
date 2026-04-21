@@ -15,6 +15,7 @@ import {
 import { normalizeImageBlob } from "../lib/media-processing"
 import { useI18n } from "../lib/i18n"
 import { composeFlowPrompt, dispatchStatusPayload, getFlowContextMode, getProviderModel, isAutoSendEnabled, providerLabels } from "../lib/prompt-builder"
+import { createRandomId } from "../lib/random-id"
 import { getChatThreads, setChatThread, setDispatchStatus, setFlowContext, setPendingPrompt, updateFlowContextDraft } from "../lib/storage"
 import { getVisionBlockedMessage, supportsVisionInput } from "../lib/vision-capabilities"
 import type { FlowContext, FlowContextAttachmentMeta, IChatApiKeys, IChatSettings, PendingPrompt, ProviderId } from "../lib/types"
@@ -88,7 +89,7 @@ function createFilePart(attachment: LocalImageAttachment): FileUIPart {
   }
 }
 
-function createMessage(role: UIMessage["role"], text: string, fileParts: FileUIPart[] = [], id = crypto.randomUUID()): UIMessage {
+function createMessage(role: UIMessage["role"], text: string, fileParts: FileUIPart[] = [], id = createRandomId()): UIMessage {
   const parts: UIMessage["parts"] = []
   const cleanText = text.trim()
 
@@ -1479,7 +1480,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
       const requestMessage = createMessage("user", requestValue || displayValue, fileParts)
       const displayedHistory = messagesRef.current
       const requestMessages = [...limitHistoryMessages(displayedHistory, settings.data.historyMessageLimit), requestMessage]
-      const assistantMessageId = crypto.randomUUID()
+      const assistantMessageId = createRandomId()
       const optimisticMessages = [...displayedHistory, displayMessage, createMessage("assistant", "", [], assistantMessageId)]
       shouldStickToBottomRef.current = true
       messagesRef.current = optimisticMessages
@@ -1630,7 +1631,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
         continue
       }
 
-      const attachmentId = crypto.randomUUID()
+      const attachmentId = createRandomId()
       const filename = file.name || `pasted-image-${index + 1}.${file.type.includes("svg") ? "svg" : file.type.includes("png") ? "png" : "jpg"}`
       const normalized = await normalizeImageBlob(file, filename)
       await putAttachmentBlob({

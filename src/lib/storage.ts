@@ -28,6 +28,7 @@ import {
   EMPTY_API_KEYS,
   EMPTY_THREADS
 } from "./prompt-builder"
+import { createRandomId } from "./random-id"
 import { STORAGE_KEYS } from "./storage-keys"
 
 export const storage = new Storage({ area: "local" })
@@ -169,7 +170,7 @@ export function normalizeFlowContext(value: unknown): FlowContext | null {
 
   return {
     schemaVersion: typeof value.schemaVersion === "number" ? value.schemaVersion : 1,
-    id: typeof value.id === "string" ? value.id : crypto.randomUUID(),
+    id: typeof value.id === "string" ? value.id : createRandomId(),
     createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString(),
     page: {
       tabId: typeof page.tabId === "number" ? page.tabId : null,
@@ -284,6 +285,7 @@ export function normalizeSettings(value: unknown): IChatSettings {
   const settings = isRecord(value) ? value : {}
   const providers = isRecord(settings.providers) ? settings.providers : {}
   const nestedModels = isRecord(providers.models) ? providers.models : {}
+  const nestedSearchEnabled = isRecord(providers.searchEnabled) ? providers.searchEnabled : {}
   const legacyModels = isRecord(settings.models) ? settings.models : {}
   const context = isRecord(settings.context) ? settings.context : {}
   const shortcuts = isRecord(settings.shortcuts) ? settings.shortcuts : {}
@@ -325,7 +327,7 @@ export function normalizeSettings(value: unknown): IChatSettings {
     : getDefaultFlowContextSystemInstructionsForSettings({ uiLanguage })
 
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     uiLanguage,
     providers: {
       active: activeProvider,
@@ -333,6 +335,11 @@ export function normalizeSettings(value: unknown): IChatSettings {
         openai: normalizeModelId("openai", nestedModels.openai ?? legacyModels.openai),
         gemini: normalizeModelId("gemini", nestedModels.gemini ?? legacyModels.gemini),
         anthropic: normalizeModelId("anthropic", nestedModels.anthropic ?? legacyModels.anthropic)
+      },
+      searchEnabled: {
+        openai: typeof nestedSearchEnabled.openai === "boolean" ? nestedSearchEnabled.openai : DEFAULT_SETTINGS.providers.searchEnabled.openai,
+        gemini: typeof nestedSearchEnabled.gemini === "boolean" ? nestedSearchEnabled.gemini : DEFAULT_SETTINGS.providers.searchEnabled.gemini,
+        anthropic: typeof nestedSearchEnabled.anthropic === "boolean" ? nestedSearchEnabled.anthropic : DEFAULT_SETTINGS.providers.searchEnabled.anthropic
       },
       openaiEndpoint
     },
@@ -415,7 +422,7 @@ function normalizePendingPrompt(value: unknown): PendingPrompt | null {
     : []
 
   return {
-    id: typeof value.id === "string" ? value.id : crypto.randomUUID(),
+    id: typeof value.id === "string" ? value.id : createRandomId(),
     flowContextId: typeof value.flowContextId === "string" ? value.flowContextId : "",
     provider: isProvider(value.provider) ? value.provider : DEFAULT_SETTINGS.providers.active,
     prompt: typeof value.prompt === "string" ? value.prompt : "",
@@ -483,7 +490,7 @@ function normalizeUIMessage(message: unknown): UIMessage | null {
   }
 
   return {
-    id: typeof message.id === "string" ? message.id : crypto.randomUUID(),
+    id: typeof message.id === "string" ? message.id : createRandomId(),
     role,
     parts
   }
@@ -509,7 +516,7 @@ function shouldPatch(original: unknown, normalized: unknown) {
 function mergeSettings(current: IChatSettings, partial: IChatSettingsUpdate): IChatSettings {
   return normalizeSettings({
     ...current,
-    schemaVersion: 4,
+    schemaVersion: 5,
     uiLanguage: partial.uiLanguage ?? current.uiLanguage,
     providers: {
       ...current.providers,
@@ -517,6 +524,10 @@ function mergeSettings(current: IChatSettings, partial: IChatSettingsUpdate): IC
       models: {
         ...current.providers.models,
         ...(partial.providers?.models ?? {})
+      },
+      searchEnabled: {
+        ...current.providers.searchEnabled,
+        ...(partial.providers?.searchEnabled ?? {})
       }
     },
     context: {

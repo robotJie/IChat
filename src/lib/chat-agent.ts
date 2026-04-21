@@ -1,7 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAI } from "@ai-sdk/openai"
-import { streamText, type ModelMessage } from "ai"
+import { streamText, type ModelMessage, type ToolSet } from "ai"
 import type { TranslateFn } from "./i18n"
 import type { IChatApiKeys, IChatSettings, ProviderId } from "./types"
 import { getProviderModel, providerLabels } from "./prompt-builder"
@@ -16,15 +16,46 @@ export function createProviderModel(provider: ProviderId, apiKeys: IChatApiKeys,
   const openaiEndpoint = settings.providers.openaiEndpoint.trim()
 
   switch (provider) {
-    case "openai":
-      return createOpenAI({
+    case "openai": {
+      const openai = createOpenAI({
         apiKey,
         baseURL: openaiEndpoint || undefined
-      }).chat(modelId)
+      })
+      return settings.providers.searchEnabled.openai ? openai.responses(modelId) : openai.chat(modelId)
+    }
     case "gemini":
       return createGoogleGenerativeAI({ apiKey }).chat(modelId)
     case "anthropic":
       return createAnthropic({ apiKey }).messages(modelId)
+    default:
+      throw new Error(`Unsupported provider: ${provider satisfies never}`)
+  }
+}
+
+function createProviderTools(provider: ProviderId, apiKeys: IChatApiKeys, settings: IChatSettings): ToolSet | undefined {
+  if (!settings.providers.searchEnabled[provider]) {
+    return undefined
+  }
+
+  const apiKey = getProviderKey(provider, apiKeys)
+  const openaiEndpoint = settings.providers.openaiEndpoint.trim()
+
+  switch (provider) {
+    case "openai":
+      return {
+        web_search: createOpenAI({
+          apiKey,
+          baseURL: openaiEndpoint || undefined
+        }).tools.webSearch()
+      } as ToolSet
+    case "gemini":
+      return {
+        google_search: createGoogleGenerativeAI({ apiKey }).tools.googleSearch({})
+      } as ToolSet
+    case "anthropic":
+      return {
+        web_search: createAnthropic({ apiKey }).tools.webSearch_20260209()
+      } as ToolSet
     default:
       throw new Error(`Unsupported provider: ${provider satisfies never}`)
   }
@@ -40,13 +71,15 @@ export async function streamProviderResponse(
 ) {
   const modelId = getProviderModel(settings, provider)
   const model = createProviderModel(provider, apiKeys, settings)
+  const tools = createProviderTools(provider, apiKeys, settings)
   const systemInstructions = settings.context.systemInstructions || ""
 
   const result = streamText({
     model,
     system: `${systemInstructions}${systemInstructions ? "\n" : ""}Provider: ${providerLabels[provider]}\nModel: ${modelId}`,
     messages,
-    abortSignal
+    abortSignal,
+    ...(tools ? { tools } : {})
   })
 
   let text = ""

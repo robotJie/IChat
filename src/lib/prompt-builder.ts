@@ -1,5 +1,6 @@
 import type { DispatchStatus, FlowContext, FlowContextAttachmentMeta, IChatApiKeys, IChatSettings, PendingPrompt, ProviderId, ProviderThreads } from "./types"
 import { DEFAULT_FLOWCONTEXT_SYSTEM_INSTRUCTIONS } from "./flowcontext-system-instructions"
+import { createRandomId } from "./random-id"
 export { STORAGE_KEYS } from "./storage-keys"
 
 export const DEFAULT_MODELS: Record<ProviderId, string> = {
@@ -9,11 +10,16 @@ export const DEFAULT_MODELS: Record<ProviderId, string> = {
 }
 
 export const DEFAULT_SETTINGS: IChatSettings = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   uiLanguage: "system",
   providers: {
     active: "openai",
     models: { ...DEFAULT_MODELS },
+    searchEnabled: {
+      openai: true,
+      gemini: true,
+      anthropic: true
+    },
     openaiEndpoint: ""
   },
   context: {
@@ -166,7 +172,7 @@ export function createPendingPrompt(flowContext: FlowContext, settings: IChatSet
     .map((attachment) => attachment.id)
 
   return {
-    id: crypto.randomUUID(),
+    id: createRandomId(),
     flowContextId: flowContext.id,
     provider: getActiveProvider(settings),
     prompt: composeFlowPrompt(flowContext),

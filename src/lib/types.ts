@@ -153,11 +153,12 @@ export interface FlowContext {
 }
 
 export interface IChatSettings {
-  schemaVersion: 4
+  schemaVersion: 5
   uiLanguage: UiLanguage
   providers: {
     active: ProviderId
     models: Record<ProviderId, string>
+    searchEnabled: Record<ProviderId, boolean>
     openaiEndpoint: string
   }
   context: {
@@ -181,6 +182,7 @@ export interface IChatSettingsUpdate {
   providers?: {
     active?: ProviderId
     models?: Partial<Record<ProviderId, string>>
+    searchEnabled?: Partial<Record<ProviderId, boolean>>
     openaiEndpoint?: string
   }
   context?: Partial<IChatSettings["context"]>

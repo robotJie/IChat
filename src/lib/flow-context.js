@@ -47,6 +47,8 @@ const BLOCK_TAGS = new Set([
 const MEDIA_SELECTOR = "img, picture, figure, canvas, video";
 const DEBUG_MEDIA_CAPTURE = true;
 
+import { createRandomId } from "./random-id";
+
 function shouldDebugMediaElement(element) {
   if (!(element instanceof Element)) {
     return false;
@@ -426,7 +428,7 @@ function summarizeMediaText(meta) {
 function createBaseAttachment(element, kind) {
   const rect = rectToObject(element.getBoundingClientRect());
   return {
-    id: crypto.randomUUID(),
+    id: createRandomId(),
     kind,
     blobStoreKey: null,
     mimeType: null,
@@ -997,7 +999,7 @@ function createBaseFlowContext(tabMeta, mode) {
 
   return {
     schemaVersion: 2,
-    id: crypto.randomUUID(),
+    id: createRandomId(),
     createdAt: new Date().toISOString(),
     page: {
       tabId: tabMeta ? tabMeta.id : null,

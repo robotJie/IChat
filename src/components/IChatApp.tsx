@@ -69,7 +69,10 @@ function didOnlyProviderDraftSettingsChange(current: AppState["settings"], next:
       current.providers.openaiEndpoint !== next.providers.openaiEndpoint ||
       current.providers.models.openai !== next.providers.models.openai ||
       current.providers.models.gemini !== next.providers.models.gemini ||
-      current.providers.models.anthropic !== next.providers.models.anthropic
+      current.providers.models.anthropic !== next.providers.models.anthropic ||
+      current.providers.searchEnabled.openai !== next.providers.searchEnabled.openai ||
+      current.providers.searchEnabled.gemini !== next.providers.searchEnabled.gemini ||
+      current.providers.searchEnabled.anthropic !== next.providers.searchEnabled.anthropic
     )
   )
 }
@@ -293,6 +296,18 @@ export function IChatApp({ viewMode }: IChatAppProps) {
     })
   }
 
+  const handleProviderSearchChange = async (provider: ProviderId, enabled: boolean) => {
+    await runSuppressedSettingsUpdate(async () => {
+      await updateSettings({
+        providers: {
+          searchEnabled: {
+            [provider]: enabled
+          }
+        }
+      })
+    })
+  }
+
   const handleApiKeyChange = async (provider: ProviderId, value: string) => {
     suppressedStorageEchoRef.current.apiKeys += 1
     try {
@@ -451,6 +466,7 @@ export function IChatApp({ viewMode }: IChatAppProps) {
             onProviderChange={(provider) => void handleProviderChange(provider)}
             onModelChange={(provider, model) => void handleModelChange(provider, model)}
             onApiKeyChange={(provider, value) => void handleApiKeyChange(provider, value)}
+            onProviderSearchChange={(provider, enabled) => void handleProviderSearchChange(provider, enabled)}
             onOpenAIEndpointChange={(value) => void handleOpenAIEndpointChange(value)}
             onHistoryMessageLimitChange={(value) => void handleHistoryMessageLimitChange(value)}
             onSystemInstructionsChange={(value) => void handleSystemInstructionsChange(value)}
