@@ -225,12 +225,24 @@ a:focus-visible {
   color: #ffd3d3;
 }
 
-.ichat-icon-button.is-gear {
+.ichat-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ichat-icon-button.is-gear,
+.ichat-icon-button.is-header-search {
   width: 42px;
   height: 42px;
   padding: 0;
   display: grid;
   place-items: center;
+}
+
+.ichat-header-search-icon {
+  width: 19px;
+  height: 19px;
 }
 
 .ichat-gear-icon {
@@ -1046,6 +1058,7 @@ a:focus-visible {
 }
 
 .ichat-thread-root {
+  position: relative;
   overflow: hidden;
   width: 100%;
   min-width: 0;
@@ -1054,6 +1067,108 @@ a:focus-visible {
   flex-direction: column;
   flex: 1;
   background: #17181a;
+}
+
+.ichat-thread-search {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  min-height: 45px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ichat-line);
+  background: rgba(23, 24, 26, 0.96);
+}
+
+.ichat-thread-search-field {
+  position: relative;
+  flex: 1;
+  min-width: 72px;
+}
+
+.ichat-thread-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  display: grid;
+  width: 15px;
+  height: 15px;
+  color: var(--ichat-dim);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.ichat-thread-search-icon svg,
+.ichat-thread-search-button svg {
+  width: 100%;
+  height: 100%;
+}
+
+.ichat-thread-search-input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 5px 8px 5px 31px;
+  border: 1px solid var(--ichat-line-strong);
+  border-radius: 10px;
+  outline: none;
+  background: #101114;
+  color: var(--ichat-text);
+  font-size: 13px;
+}
+
+.ichat-thread-search-input:focus {
+  border-color: rgba(159, 195, 255, 0.72);
+  box-shadow: 0 0 0 2px rgba(159, 195, 255, 0.12);
+}
+
+.ichat-thread-search-input::-webkit-search-cancel-button {
+  filter: invert(1);
+  opacity: 0.64;
+}
+
+.ichat-thread-search-count {
+  flex-shrink: 0;
+  min-width: 50px;
+  color: var(--ichat-muted);
+  font-size: 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ichat-thread-search-count.is-empty {
+  color: #ffb0b0;
+}
+
+.ichat-thread-search-button {
+  flex-shrink: 0;
+  border: 1px solid var(--ichat-line);
+  background: #202226;
+  color: var(--ichat-muted);
+  cursor: pointer;
+}
+
+.ichat-thread-search-button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 7px;
+  border-radius: 10px;
+}
+
+.ichat-thread-search-button:hover:not(:disabled),
+.ichat-thread-search-button:focus-visible {
+  border-color: rgba(159, 195, 255, 0.72);
+  color: var(--ichat-accent-strong);
+  background: #282c32;
+}
+
+.ichat-thread-search-button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .ichat-thread-viewport {
@@ -1110,6 +1225,25 @@ a:focus-visible {
 
 .ichat-message.is-user .ichat-bubble {
   background: #2a313b;
+}
+
+.ichat-message.is-search-match .ichat-bubble {
+  border-color: rgba(255, 209, 102, 0.5);
+}
+
+.ichat-message.is-active-search-match .ichat-bubble {
+  border-color: rgba(255, 209, 102, 0.95);
+  box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.18), 0 16px 36px rgba(0, 0, 0, 0.24);
+}
+
+::highlight(ichat-search-match) {
+  background: rgba(255, 209, 102, 0.3);
+  color: inherit;
+}
+
+::highlight(ichat-search-active) {
+  background: #ffd166;
+  color: #15120a;
 }
 
 .ichat-thread-stack {

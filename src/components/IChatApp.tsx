@@ -85,6 +85,7 @@ export function IChatApp({ viewMode }: IChatAppProps) {
     anthropic: 0
   })
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [threadSearchSignal, setThreadSearchSignal] = useState(0)
   const deferredFlowContext = useDeferredValue(appState.flowContext)
   const gearButtonRef = useRef<HTMLButtonElement | null>(null)
   const wasSettingsOpenRef = useRef(false)
@@ -431,12 +432,25 @@ export function IChatApp({ viewMode }: IChatAppProps) {
             <div className="ichat-brand" aria-hidden="true">
               <IChatLogotype className="ichat-brand-mark" title="IChat" variant="wordmark" />
             </div>
-            <button className="ichat-icon-button is-gear" ref={gearButtonRef} type="button" aria-label={t("common.settings")} onClick={() => setSettingsOpen(true)}>
-              <svg className="ichat-gear-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none">
-                <path d="M12 8.75A3.25 3.25 0 1 0 12 15.25A3.25 3.25 0 1 0 12 8.75Z" stroke="currentColor" strokeWidth="1.7" />
-                <path d="M19.4 13.5V10.5L17.36 9.82C17.19 9.25 16.96 8.71 16.66 8.2L17.62 6.25L15.5 4.13L13.55 5.09C13.04 4.79 12.5 4.56 11.93 4.39L11.25 2.35H8.25L7.57 4.39C7 4.56 6.46 4.79 5.95 5.09L4 4.13L1.88 6.25L2.84 8.2C2.54 8.71 2.31 9.25 2.14 9.82L0.1 10.5V13.5L2.14 14.18C2.31 14.75 2.54 15.29 2.84 15.8L1.88 17.75L4 19.87L5.95 18.91C6.46 19.21 7 19.44 7.57 19.61L8.25 21.65H11.25L11.93 19.61C12.5 19.44 13.04 19.21 13.55 18.91L15.5 19.87L17.62 17.75L16.66 15.8C16.96 15.29 17.19 14.75 17.36 14.18L19.4 13.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-              </svg>
-            </button>
+            <div className="ichat-header-actions">
+              <button
+                className="ichat-icon-button is-header-search"
+                type="button"
+                aria-label={t("chat.search.open")}
+                title={t("chat.search.openShortcut")}
+                onClick={() => setThreadSearchSignal((current) => current + 1)}>
+                <svg className="ichat-header-search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="10.5" cy="10.5" r="5.75" stroke="currentColor" strokeWidth="1.7" />
+                  <path d="M14.75 14.75L20 20" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+              </button>
+              <button className="ichat-icon-button is-gear" ref={gearButtonRef} type="button" aria-label={t("common.settings")} onClick={() => setSettingsOpen(true)}>
+                <svg className="ichat-gear-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 8.75A3.25 3.25 0 1 0 12 15.25A3.25 3.25 0 1 0 12 8.75Z" stroke="currentColor" strokeWidth="1.7" />
+                  <path d="M19.4 13.5V10.5L17.36 9.82C17.19 9.25 16.96 8.71 16.66 8.2L17.62 6.25L15.5 4.13L13.55 5.09C13.04 4.79 12.5 4.56 11.93 4.39L11.25 2.35H8.25L7.57 4.39C7 4.56 6.46 4.79 5.95 5.09L4 4.13L1.88 6.25L2.84 8.2C2.54 8.71 2.31 9.25 2.14 9.82L0.1 10.5V13.5L2.14 14.18C2.31 14.75 2.54 15.29 2.84 15.8L1.88 17.75L4 19.87L5.95 18.91C6.46 19.21 7 19.44 7.57 19.61L8.25 21.65H11.25L11.93 19.61C12.5 19.44 13.04 19.21 13.55 18.91L15.5 19.87L17.62 17.75L16.66 15.8C16.96 15.29 17.19 14.75 17.36 14.18L19.4 13.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </div>
           </header>
 
           {captureErrorBanner ? (
@@ -451,6 +465,7 @@ export function IChatApp({ viewMode }: IChatAppProps) {
             pendingPrompt={appState.pendingPrompt}
             flowContext={appState.flowContext}
             threadClearSignal={threadClearSignals[activeProvider]}
+            searchOpenSignal={threadSearchSignal}
           />
         </div>
 

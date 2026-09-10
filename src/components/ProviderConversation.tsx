@@ -1,5 +1,5 @@
 import type { ModelMessage, UIMessage } from "ai"
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import type { ClipboardEvent as ReactClipboardEvent } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeKatex from "rehype-katex"
@@ -32,6 +32,7 @@ interface ProviderConversationProps {
   pendingPrompt: PendingPrompt | null
   flowContext: FlowContext | null
   threadClearSignal: number
+  searchOpenSignal: number
 }
 
 interface FlowContextEditorState {
@@ -54,6 +55,21 @@ interface LocalImageAttachment {
 type FileUIPart = Extract<UIMessage["parts"][number], { type: "file" }>
 type TextUIPart = Extract<UIMessage["parts"][number], { type: "text" }>
 const UNSUPPORTED_MODEL_IMAGE_MEDIA_TYPES = new Set(["image/svg+xml"])
+const SEARCH_MATCH_HIGHLIGHT = "ichat-search-match"
+const SEARCH_ACTIVE_HIGHLIGHT = "ichat-search-active"
+
+type SearchHighlightRegistry = HighlightRegistry & {
+  delete(name: string): boolean
+  set(name: string, highlight: Highlight): SearchHighlightRegistry
+}
+
+function getSearchHighlightRegistry() {
+  if (typeof CSS === "undefined" || !CSS.highlights) {
+    return null
+  }
+
+  return CSS.highlights as SearchHighlightRegistry
+}
 
 function extractUiMessageText(message: UIMessage) {
   return message.parts
@@ -125,6 +141,61 @@ function limitHistoryMessages(messages: UIMessage[], limit: number) {
   }
 
   return messages.slice(-limit)
+}
+
+function getConversationSearchMatches(messages: UIMessage[], query: string) {
+  const needle = query.trim().toLocaleLowerCase()
+  if (!needle) {
+    return []
+  }
+
+  return messages
+    .filter((message) => extractUiMessageText(message).toLocaleLowerCase().includes(needle))
+    .map((message) => message.id)
+}
+
+function clearConversationSearchHighlights(content: HTMLElement | null) {
+  content?.querySelectorAll(".ichat-message.is-search-match, .ichat-message.is-active-search-match").forEach((element) => {
+    element.classList.remove("is-search-match", "is-active-search-match")
+  })
+
+  const highlights = getSearchHighlightRegistry()
+  highlights?.delete(SEARCH_MATCH_HIGHLIGHT)
+  highlights?.delete(SEARCH_ACTIVE_HIGHLIGHT)
+}
+
+function getTextSearchRanges(container: HTMLElement, query: string) {
+  const ranges: Range[] = []
+  const needle = query.toLocaleLowerCase()
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement
+      if (!node.nodeValue || !parent || parent.closest(".katex-mathml, .ichat-message-tools")) {
+        return NodeFilter.FILTER_REJECT
+      }
+
+      return NodeFilter.FILTER_ACCEPT
+    }
+  })
+
+  let node = walker.nextNode()
+  while (node) {
+    const value = node.nodeValue || ""
+    const haystack = value.toLocaleLowerCase()
+    let start = haystack.indexOf(needle)
+
+    while (start !== -1) {
+      const range = document.createRange()
+      range.setStart(node, start)
+      range.setEnd(node, start + query.length)
+      ranges.push(range)
+      start = haystack.indexOf(needle, start + Math.max(query.length, 1))
+    }
+
+    node = walker.nextNode()
+  }
+
+  return ranges
 }
 
 async function filePartToModelPart(part: FileUIPart) {
@@ -529,7 +600,7 @@ const ChatBubble = memo(function ChatBubble({ message }: { message: UIMessage })
   }
 
   return (
-    <article className={`ichat-message is-${role}`}>
+    <article className={`ichat-message is-${role}`} data-message-id={message.id}>
       <div className="ichat-bubble">
         {fileParts.length > 0 ? (
           <div className="ichat-message-media-grid">
@@ -829,7 +900,7 @@ function DraftContextModal(props: {
   )
 }
 
-export function ProviderConversation({ provider, settings, apiKeys, pendingPrompt, flowContext, threadClearSignal }: ProviderConversationProps) {
+export function ProviderConversation({ provider, settings, apiKeys, pendingPrompt, flowContext, threadClearSignal, searchOpenSignal }: ProviderConversationProps) {
   const { t } = useI18n()
   const currentModel = getProviderModel(settings, provider)
   const currentKey = getProviderKey(provider, apiKeys)
@@ -842,9 +913,15 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
   const [editorState, setEditorState] = useState<FlowContextEditorState | null>(null)
   const [composerAttachments, setComposerAttachments] = useState<LocalImageAttachment[]>([])
   const [previewAttachment, setPreviewAttachment] = useState<LocalImageAttachment | null>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchSessionActive, setSearchSessionActive] = useState(false)
+  const [activeSearchIndex, setActiveSearchIndex] = useState(0)
+  const [searchNavigationSignal, setSearchNavigationSignal] = useState(0)
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const threadContentRef = useRef<HTMLDivElement | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const messagesRef = useRef<UIMessage[]>([])
   const isBusyRef = useRef(false)
   const shouldStickToBottomRef = useRef(true)
@@ -853,6 +930,13 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
   const activePendingIdRef = useRef<string | null>(null)
   const activeEditorContextIdRef = useRef<string | null>(null)
   const lastEditorSignatureRef = useRef("")
+  const lastSearchOpenSignalRef = useRef(searchOpenSignal)
+
+  const closeConversationSearch = useCallback(() => {
+    setSearchOpen(false)
+    setSearchSessionActive(false)
+    setActiveSearchIndex(0)
+  }, [])
 
   useEffect(() => {
     const abortActiveRequest = () => {
@@ -928,6 +1012,14 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
   const allActiveAttachments = useMemo(() => [...contextImageAttachments, ...composerAttachments], [composerAttachments, contextImageAttachments])
   const visionBlocked = allActiveAttachments.length > 0 && !supportsVisionInput(provider, currentModel)
   const visionBlockedMessage = getVisionBlockedMessage(provider, currentModel, t)
+  const normalizedSearchQuery = searchQuery.trim()
+  const deferredSearchQuery = useDeferredValue(normalizedSearchQuery)
+  const activeSearchQuery = searchSessionActive && normalizedSearchQuery ? deferredSearchQuery : ""
+  const searchMatches = useMemo(
+    () => getConversationSearchMatches(messages, activeSearchQuery),
+    [activeSearchQuery, messages]
+  )
+  const activeSearchMessageId = searchMatches[activeSearchIndex] ?? null
 
   useEffect(() => {
     messagesRef.current = messages
@@ -951,7 +1043,131 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
     setMessages([])
     setIsBusy(false)
     setErrorBanner(null)
+    setSearchOpen(false)
+    setSearchQuery("")
+    setSearchSessionActive(false)
+    setActiveSearchIndex(0)
   }, [threadClearSignal])
+
+  useEffect(() => {
+    if (!searchOpen) {
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus()
+      searchInputRef.current?.select()
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [searchOpen])
+
+  useEffect(() => {
+    if (searchOpenSignal === lastSearchOpenSignalRef.current) {
+      return
+    }
+
+    lastSearchOpenSignalRef.current = searchOpenSignal
+    setSearchOpen(true)
+
+    const frame = window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus()
+      searchInputRef.current?.select()
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [searchOpenSignal])
+
+  useEffect(() => {
+    const handleSearchShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "f" && hydrated && messages.length > 0) {
+        event.preventDefault()
+        setSearchOpen(true)
+        return
+      }
+
+      if (event.key === "Escape" && searchOpen) {
+        event.preventDefault()
+        closeConversationSearch()
+      }
+    }
+
+    window.addEventListener("keydown", handleSearchShortcut)
+    return () => window.removeEventListener("keydown", handleSearchShortcut)
+  }, [closeConversationSearch, hydrated, messages.length, searchOpen])
+
+  useEffect(() => {
+    setActiveSearchIndex(0)
+  }, [activeSearchQuery])
+
+  useEffect(() => {
+    setActiveSearchIndex((current) => {
+      if (searchMatches.length === 0) {
+        return 0
+      }
+
+      return Math.min(current, searchMatches.length - 1)
+    })
+  }, [searchMatches.length])
+
+  useEffect(() => {
+    const content = threadContentRef.current
+    clearConversationSearchHighlights(content)
+
+    if (!searchOpen || !activeSearchQuery || !content || searchMatches.length === 0) {
+      return
+    }
+
+    const matchingIds = new Set(searchMatches)
+    const regularRanges: Range[] = []
+    const activeRanges: Range[] = []
+
+    content.querySelectorAll<HTMLElement>(".ichat-message[data-message-id]").forEach((messageElement) => {
+      const messageId = messageElement.dataset.messageId
+      if (!messageId || !matchingIds.has(messageId)) {
+        return
+      }
+
+      const isActive = messageId === activeSearchMessageId
+      messageElement.classList.add("is-search-match")
+      messageElement.classList.toggle("is-active-search-match", isActive)
+
+      messageElement.querySelectorAll<HTMLElement>(".ichat-message-text").forEach((textElement) => {
+        const ranges = getTextSearchRanges(textElement, activeSearchQuery)
+        if (isActive) {
+          activeRanges.push(...ranges)
+        } else {
+          regularRanges.push(...ranges)
+        }
+      })
+    })
+
+    const highlights = getSearchHighlightRegistry()
+    if (highlights && typeof Highlight !== "undefined") {
+      if (regularRanges.length > 0) {
+        highlights.set(SEARCH_MATCH_HIGHLIGHT, new Highlight(...regularRanges))
+      }
+      if (activeRanges.length > 0) {
+        highlights.set(SEARCH_ACTIVE_HIGHLIGHT, new Highlight(...activeRanges))
+      }
+    }
+
+    const activeElement = Array.from(content.querySelectorAll<HTMLElement>(".ichat-message[data-message-id]"))
+      .find((element) => element.dataset.messageId === activeSearchMessageId)
+    const viewport = viewportRef.current
+    if (activeElement && viewport) {
+      shouldStickToBottomRef.current = false
+      const viewportRect = viewport.getBoundingClientRect()
+      const activeRect = activeElement.getBoundingClientRect()
+      const targetTop = viewport.scrollTop + activeRect.top - viewportRect.top - (viewport.clientHeight - activeRect.height) / 2
+      viewport.scrollTo({
+        top: Math.max(0, targetTop),
+        behavior: "smooth"
+      })
+    }
+
+    return () => clearConversationSearchHighlights(content)
+  }, [activeSearchMessageId, activeSearchQuery, searchMatches, searchNavigationSignal, searchOpen])
 
   const scrollThreadToBottom = useCallback(() => {
     const viewport = viewportRef.current
@@ -1092,6 +1308,10 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
     setComposerAttachments([])
     setDraftContextOpen(false)
     setPreviewAttachment(null)
+    setSearchOpen(false)
+    setSearchQuery("")
+    setSearchSessionActive(false)
+    setActiveSearchIndex(0)
     setEditorState(null)
     activeEditorContextIdRef.current = null
     lastEditorSignatureRef.current = ""
@@ -1454,6 +1674,15 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
     abortControllerRef.current?.abort()
   }, [])
 
+  const moveSearchResult = useCallback((direction: -1 | 1) => {
+    if (searchMatches.length === 0) {
+      return
+    }
+
+    setActiveSearchIndex((current) => (current + direction + searchMatches.length) % searchMatches.length)
+    setSearchNavigationSignal((current) => current + 1)
+  }, [searchMatches.length])
+
   const missingKey = !currentKey
   const modalReadOnly = isBusy || attachmentPrompt?.status === "processing"
   const canSubmit = !isBusy && !visionBlocked && (Boolean(composerText.trim()) || Boolean(attachmentPrompt) || composerAttachments.length > 0)
@@ -1470,6 +1699,80 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
       {!missingKey && activeBanner ? <div className="ichat-banner is-warning">{activeBanner}</div> : null}
 
       <div className="ichat-thread-root">
+        {searchOpen ? (
+          <div className="ichat-thread-search is-open">
+            <label className="ichat-thread-search-field">
+                <span className="ichat-thread-search-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" fill="none">
+                    <circle cx="7" cy="7" r="4.25" stroke="currentColor" strokeWidth="1.5" />
+                    <path d="M10.25 10.25L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <input
+                  ref={searchInputRef}
+                  className="ichat-thread-search-input"
+                  type="search"
+                  value={searchQuery}
+                  aria-label={t("chat.search.inputLabel")}
+                  placeholder={t("chat.search.placeholder")}
+                  onChange={(event) => {
+                    setSearchQuery(event.target.value)
+                    setSearchSessionActive(true)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault()
+                      if (!searchSessionActive && normalizedSearchQuery) {
+                        setSearchSessionActive(true)
+                        return
+                      }
+                      moveSearchResult(event.shiftKey ? -1 : 1)
+                    }
+                  }}
+                />
+            </label>
+            <output className={`ichat-thread-search-count ${activeSearchQuery && searchMatches.length === 0 ? "is-empty" : ""}`} aria-live="polite">
+                {!activeSearchQuery
+                  ? t("chat.search.ready")
+                  : searchMatches.length > 0
+                    ? t("chat.search.resultCount", { current: activeSearchIndex + 1, total: searchMatches.length })
+                    : t("chat.search.noResults")}
+            </output>
+            <button
+                className="ichat-thread-search-button"
+                type="button"
+                aria-label={t("chat.search.previous")}
+                title={t("chat.search.previous")}
+                disabled={searchMatches.length === 0}
+                onClick={() => moveSearchResult(-1)}>
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M3.5 10L8 5.5L12.5 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            </button>
+            <button
+                className="ichat-thread-search-button"
+                type="button"
+                aria-label={t("chat.search.next")}
+                title={t("chat.search.next")}
+                disabled={searchMatches.length === 0}
+                onClick={() => moveSearchResult(1)}>
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M3.5 6L8 10.5L12.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            </button>
+            <button
+                className="ichat-thread-search-button"
+                type="button"
+                aria-label={t("chat.search.close")}
+                title={t("chat.search.close")}
+                onClick={closeConversationSearch}>
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M4 4L12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  <path d="M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+            </button>
+          </div>
+        ) : null}
           <div ref={viewportRef} className="ichat-thread-viewport">
           <div ref={threadContentRef} className="ichat-thread-stack">
             <ConversationHistory
