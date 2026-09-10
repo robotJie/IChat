@@ -6,6 +6,41 @@ import type { TranslateFn } from "./i18n"
 import type { IChatApiKeys, IChatSettings, ProviderId } from "./types"
 import { getProviderModel, providerLabels } from "./prompt-builder"
 
+function providerErrorBody(provider: ProviderId, message: string) {
+  switch (provider) {
+    case "openai":
+      return { error: { message, type: "network_error", code: "network_error" } }
+    case "gemini":
+      return { error: { code: 503, message, status: "UNAVAILABLE" } }
+    case "anthropic":
+      return { type: "error", error: { type: "api_error", message } }
+    default:
+      return { error: { message } }
+  }
+}
+
+function createProviderFetch(provider: ProviderId): typeof fetch {
+  return async (input, init) => {
+    try {
+      return await fetch(input, init)
+    } catch (error) {
+      const cancelled = init?.signal?.aborted || (error instanceof Error && error.name === "AbortError")
+      const message = cancelled
+        ? "The provider request was cancelled."
+        : `The provider network request failed: ${error instanceof Error ? error.message : String(error)}`
+
+      // Keep native fetch rejections out of the AI SDK stream pipeline. Provider
+      // adapters turn this synthetic HTTP response into their normal API error,
+      // which the conversation UI already catches and displays.
+      return new Response(JSON.stringify(providerErrorBody(provider, message)), {
+        status: cancelled ? 499 : 503,
+        statusText: cancelled ? "Request Cancelled" : "Provider Network Error",
+        headers: { "content-type": "application/json" }
+      })
+    }
+  }
+}
+
 export function getProviderKey(provider: ProviderId, apiKeys: IChatApiKeys) {
   return apiKeys[provider]?.trim() || ""
 }
@@ -14,19 +49,21 @@ export function createProviderModel(provider: ProviderId, apiKeys: IChatApiKeys,
   const apiKey = getProviderKey(provider, apiKeys)
   const modelId = getProviderModel(settings, provider)
   const openaiEndpoint = settings.providers.openaiEndpoint.trim()
+  const providerFetch = createProviderFetch(provider)
 
   switch (provider) {
     case "openai": {
       const openai = createOpenAI({
         apiKey,
-        baseURL: openaiEndpoint || undefined
+        baseURL: openaiEndpoint || undefined,
+        fetch: providerFetch
       })
       return settings.providers.searchEnabled.openai ? openai.responses(modelId) : openai.chat(modelId)
     }
     case "gemini":
-      return createGoogleGenerativeAI({ apiKey }).chat(modelId)
+      return createGoogleGenerativeAI({ apiKey, fetch: providerFetch }).chat(modelId)
     case "anthropic":
-      return createAnthropic({ apiKey }).messages(modelId)
+      return createAnthropic({ apiKey, fetch: providerFetch }).messages(modelId)
     default:
       throw new Error(`Unsupported provider: ${provider satisfies never}`)
   }
@@ -39,22 +76,24 @@ function createProviderTools(provider: ProviderId, apiKeys: IChatApiKeys, settin
 
   const apiKey = getProviderKey(provider, apiKeys)
   const openaiEndpoint = settings.providers.openaiEndpoint.trim()
+  const providerFetch = createProviderFetch(provider)
 
   switch (provider) {
     case "openai":
       return {
         web_search: createOpenAI({
           apiKey,
-          baseURL: openaiEndpoint || undefined
+          baseURL: openaiEndpoint || undefined,
+          fetch: providerFetch
         }).tools.webSearch()
       } as ToolSet
     case "gemini":
       return {
-        google_search: createGoogleGenerativeAI({ apiKey }).tools.googleSearch({})
+        google_search: createGoogleGenerativeAI({ apiKey, fetch: providerFetch }).tools.googleSearch({})
       } as ToolSet
     case "anthropic":
       return {
-        web_search: createAnthropic({ apiKey }).tools.webSearch_20260209()
+        web_search: createAnthropic({ apiKey, fetch: providerFetch }).tools.webSearch_20260209()
       } as ToolSet
     default:
       throw new Error(`Unsupported provider: ${provider satisfies never}`)
@@ -69,24 +108,42 @@ export async function streamProviderResponse(
   abortSignal: AbortSignal,
   onTextDelta?: (nextText: string) => void
 ) {
+  abortSignal.throwIfAborted()
+
   const modelId = getProviderModel(settings, provider)
   const model = createProviderModel(provider, apiKeys, settings)
   const tools = createProviderTools(provider, apiKeys, settings)
   const systemInstructions = settings.context.systemInstructions || ""
+  let streamError: unknown = null
 
   const result = streamText({
     model,
     system: `${systemInstructions}${systemInstructions ? "\n" : ""}Provider: ${providerLabels[provider]}\nModel: ${modelId}`,
     messages,
     abortSignal,
+    // The conversation pipeline already catches and displays stream errors.
+    // Avoid AI SDK's default console.error duplicating them in chrome://extensions.
+    onError: ({ error }) => {
+      streamError ??= error
+    },
     ...(tools ? { tools } : {})
   })
 
   let text = ""
 
-  for await (const chunk of result.textStream) {
-    text += chunk
-    onTextDelta?.(text)
+  for await (const part of result.fullStream) {
+    if (part.type === "text-delta") {
+      text += part.text
+      onTextDelta?.(text)
+    } else if (part.type === "error") {
+      streamError ??= part.error
+    }
+  }
+
+  abortSignal.throwIfAborted()
+
+  if (streamError !== null) {
+    throw streamError
   }
 
   return text.trim()

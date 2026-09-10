@@ -854,6 +854,19 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
   const activeEditorContextIdRef = useRef<string | null>(null)
   const lastEditorSignatureRef = useRef("")
 
+  useEffect(() => {
+    const abortActiveRequest = () => {
+      abortControllerRef.current?.abort()
+    }
+
+    window.addEventListener("pagehide", abortActiveRequest)
+
+    return () => {
+      window.removeEventListener("pagehide", abortActiveRequest)
+      abortActiveRequest()
+    }
+  }, [])
+
   const attachmentPrompt = useMemo(() => {
     if (!pendingPrompt || pendingPrompt.provider !== provider) {
       return null
