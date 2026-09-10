@@ -710,17 +710,25 @@ a:focus-visible {
 }
 
 .ichat-message-text {
+  min-width: 0;
+  max-width: 100%;
   line-height: 1.65;
+  overflow-wrap: anywhere;
 }
 
 .ichat-message-text.is-markdown {
   display: grid;
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
   white-space: normal;
 }
 
 .ichat-message-text.is-markdown > * {
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .ichat-message-text.is-markdown h1,
@@ -764,6 +772,7 @@ a:focus-visible {
 }
 
 .ichat-message-text.is-markdown pre {
+  max-width: 100%;
   overflow: auto;
   padding: 12px 14px;
   border-radius: 14px;
@@ -790,7 +799,28 @@ a:focus-visible {
   padding: 0;
 }
 
+.ichat-message-text.is-markdown .katex {
+  font-size: 1.02em;
+  word-break: normal;
+}
+
+.ichat-message-text.is-markdown :not(.katex-display) > .katex {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  vertical-align: middle;
+}
+
+.ichat-message-text.is-markdown .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.2em 0;
+}
+
 .ichat-table-scroll {
+  max-width: 100%;
   overflow-x: auto;
 }
 
@@ -1008,6 +1038,8 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   flex: 1;
   overflow: hidden;
@@ -1015,6 +1047,8 @@ a:focus-visible {
 
 .ichat-thread-root {
   overflow: hidden;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -1024,8 +1058,11 @@ a:focus-visible {
 
 .ichat-thread-viewport {
   flex: 1;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -1053,6 +1090,8 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  width: 100%;
+  min-width: 0;
 }
 
 .ichat-message.is-user {
@@ -1061,7 +1100,8 @@ a:focus-visible {
 }
 
 .ichat-bubble {
-  max-width: min(100%, 88%);
+  min-width: 0;
+  max-width: 88%;
   border-radius: 20px;
   padding: 14px 16px;
   border: 1px solid var(--ichat-line);
@@ -1075,6 +1115,8 @@ a:focus-visible {
 .ichat-thread-stack {
   display: grid;
   gap: 14px;
+  width: 100%;
+  min-width: 0;
   padding-bottom: 6px;
 }
 

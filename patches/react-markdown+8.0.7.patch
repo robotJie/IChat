@@ -1,0 +1,14 @@
+diff --git a/node_modules/react-markdown/lib/ast-to-react.js b/node_modules/react-markdown/lib/ast-to-react.js
+index 5248e5e..d8b5066 100644
+--- a/node_modules/react-markdown/lib/ast-to-react.js
++++ b/node_modules/react-markdown/lib/ast-to-react.js
+@@ -103,7 +103,8 @@
+ import React from 'react'
+ import ReactIs from 'react-is'
+ import {whitespace} from 'hast-util-whitespace'
+-import {svg, find, hastToReact} from 'property-information'
++import {svg, find} from 'property-information'
++import {hastToReact} from 'property-information/lib/hast-to-react.js'
+ import {stringify as spaces} from 'space-separated-tokens'
+ import {stringify as commas} from 'comma-separated-tokens'
+ import style from 'style-to-object'

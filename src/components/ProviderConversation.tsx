@@ -1,6 +1,11 @@
 import type { ModelMessage, UIMessage } from "ai"
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { ClipboardEvent as ReactClipboardEvent, ReactNode } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type { ClipboardEvent as ReactClipboardEvent } from "react"
+import ReactMarkdown from "react-markdown"
+import rehypeKatex from "rehype-katex"
+import remarkGfm from "remark-gfm"
+import remarkMath from "remark-math"
+import "katex/dist/katex.min.css"
 import { formatProviderError, getProviderKey, streamProviderResponse } from "../lib/chat-agent"
 import {
   attachmentIdFromUrl,
@@ -48,16 +53,6 @@ interface LocalImageAttachment {
 
 type FileUIPart = Extract<UIMessage["parts"][number], { type: "file" }>
 type TextUIPart = Extract<UIMessage["parts"][number], { type: "text" }>
-type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6
-type TableAlignment = "left" | "center" | "right"
-type MarkdownBlock =
-  | { type: "paragraph"; text: string }
-  | { type: "heading"; level: HeadingLevel; text: string }
-  | { type: "blockquote"; text: string }
-  | { type: "code"; language: string | null; text: string }
-  | { type: "list"; ordered: boolean; items: string[] }
-  | { type: "table"; headers: string[]; alignments: TableAlignment[]; rows: string[][] }
-
 const UNSUPPORTED_MODEL_IMAGE_MEDIA_TYPES = new Set(["image/svg+xml"])
 
 function extractUiMessageText(message: UIMessage) {
@@ -365,208 +360,6 @@ function applyEditorState(flowContext: FlowContext, editorState: FlowContextEdit
   }
 }
 
-function isMarkdownBoundary(line: string) {
-  return /^#{1,6}\s+/.test(line) || /^>\s?/.test(line) || /^```/.test(line) || /^[-*+]\s+/.test(line) || /^\d+\.\s+/.test(line)
-}
-
-function splitMarkdownTableRow(line: string) {
-  return line
-    .trim()
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split("|")
-    .map((cell) => cell.trim())
-}
-
-function isMarkdownTableDivider(line: string) {
-  const cells = splitMarkdownTableRow(line)
-  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell))
-}
-
-function parseMarkdownTableAlignment(cell: string): TableAlignment {
-  const trimmed = cell.trim()
-  const hasLeft = trimmed.startsWith(":")
-  const hasRight = trimmed.endsWith(":")
-
-  if (hasLeft && hasRight) {
-    return "center"
-  }
-
-  if (hasRight) {
-    return "right"
-  }
-
-  return "left"
-}
-
-function normalizeMarkdownTableRow<T>(cells: T[], width: number, fallback: T) {
-  if (cells.length === width) {
-    return cells
-  }
-
-  if (cells.length > width) {
-    return cells.slice(0, width)
-  }
-
-  return [...cells, ...Array.from({ length: width - cells.length }, () => fallback)]
-}
-
-function parseMarkdownBlocks(source: string): MarkdownBlock[] {
-  const normalized = source.replace(/\r\n?/g, "\n")
-  const lines = normalized.split("\n")
-  const blocks: MarkdownBlock[] = []
-
-  let index = 0
-  while (index < lines.length) {
-    const line = lines[index]
-    const trimmed = line.trim()
-
-    if (!trimmed) {
-      index += 1
-      continue
-    }
-
-    const codeFenceMatch = line.match(/^```([\w-]+)?\s*$/)
-    if (codeFenceMatch) {
-      const codeLines: string[] = []
-      index += 1
-
-      while (index < lines.length && !/^```/.test(lines[index])) {
-        codeLines.push(lines[index])
-        index += 1
-      }
-
-      if (index < lines.length && /^```/.test(lines[index])) {
-        index += 1
-      }
-
-      blocks.push({
-        type: "code",
-        language: codeFenceMatch[1] || null,
-        text: codeLines.join("\n")
-      })
-      continue
-    }
-
-    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/)
-    if (headingMatch) {
-      blocks.push({
-        type: "heading",
-        level: headingMatch[1].length as HeadingLevel,
-        text: headingMatch[2].trim()
-      })
-      index += 1
-      continue
-    }
-
-    if (/^>\s?/.test(line)) {
-      const quoteLines: string[] = []
-
-      while (index < lines.length && /^>\s?/.test(lines[index])) {
-        quoteLines.push(lines[index].replace(/^>\s?/, ""))
-        index += 1
-      }
-
-      blocks.push({
-        type: "blockquote",
-        text: quoteLines.join("\n").trim()
-      })
-      continue
-    }
-
-    const nextLine = lines[index + 1]
-    if (line.includes("|") && nextLine && isMarkdownTableDivider(nextLine)) {
-      const headers = splitMarkdownTableRow(line)
-      const alignments = splitMarkdownTableRow(nextLine).map(parseMarkdownTableAlignment)
-      const rows: string[][] = []
-      index += 2
-
-      while (index < lines.length) {
-        const currentLine = lines[index]
-        if (!currentLine.trim()) {
-          index += 1
-          break
-        }
-
-        if (!currentLine.includes("|") || isMarkdownBoundary(currentLine) || isMarkdownTableDivider(currentLine)) {
-          break
-        }
-
-        rows.push(normalizeMarkdownTableRow(splitMarkdownTableRow(currentLine), headers.length, ""))
-        index += 1
-      }
-
-      blocks.push({
-        type: "table",
-        headers,
-        alignments: normalizeMarkdownTableRow(alignments, headers.length, "left"),
-        rows
-      })
-      continue
-    }
-
-    const orderedStartMatch = line.match(/^\d+\.\s+(.+)$/)
-    const unorderedStartMatch = line.match(/^[-*+]\s+(.+)$/)
-    if (orderedStartMatch || unorderedStartMatch) {
-      const ordered = Boolean(orderedStartMatch)
-      const items: string[] = []
-
-      while (index < lines.length) {
-        const currentLine = lines[index]
-        const orderedMatch = currentLine.match(/^\d+\.\s+(.+)$/)
-        const unorderedMatch = currentLine.match(/^[-*+]\s+(.+)$/)
-        const itemMatch = ordered ? orderedMatch : unorderedMatch
-
-        if (itemMatch) {
-          items.push(itemMatch[1].trim())
-          index += 1
-          continue
-        }
-
-        if (/^\s{2,}\S+/.test(currentLine) && items.length > 0) {
-          items[items.length - 1] = `${items[items.length - 1]}\n${currentLine.trim()}`
-          index += 1
-          continue
-        }
-
-        break
-      }
-
-      blocks.push({
-        type: "list",
-        ordered,
-        items
-      })
-      continue
-    }
-
-    const paragraphLines = [line]
-    index += 1
-
-    while (index < lines.length) {
-      const nextLine = lines[index]
-      if (!nextLine.trim()) {
-        index += 1
-        break
-      }
-
-      if (isMarkdownBoundary(nextLine)) {
-        break
-      }
-
-      paragraphLines.push(nextLine)
-      index += 1
-    }
-
-    blocks.push({
-      type: "paragraph",
-      text: paragraphLines.join("\n").trim()
-    })
-  }
-
-  return blocks
-}
-
 function getSafeMarkdownHref(href: string) {
   try {
     const parsed = new URL(href)
@@ -580,152 +373,73 @@ function getSafeMarkdownHref(href: string) {
   return null
 }
 
-function renderInlineMarkdown(text: string): ReactNode[] {
-  const nodes: ReactNode[] = []
-  const pattern = /(`[^`\n]+`|\[([^\]]+)\]\(([^)\s]+)\)|\*\*([\s\S]+?)\*\*|__([\s\S]+?)__|\*([^*\n]+)\*|_([^_\n]+)_)/g
-  let cursor = 0
-  let key = 0
+function normalizeDisplayMath(source: string) {
+  const lines = source.replace(/\r\n?/g, "\n").split("\n")
+  let codeFence: { marker: string; length: number } | null = null
 
-  const pushPlainText = (segment: string) => {
-    const parts = segment.split("\n")
-    parts.forEach((part, partIndex) => {
-      if (part) {
-        nodes.push(<Fragment key={`text-${key += 1}`}>{part}</Fragment>)
+  return lines.flatMap((line) => {
+    const fenceMatch = line.match(/^\s*(`{3,}|~{3,})(.*)$/)
+    if (fenceMatch) {
+      const marker = fenceMatch[1][0]
+      const length = fenceMatch[1].length
+      if (!codeFence) {
+        codeFence = { marker, length }
+      } else if (marker === codeFence.marker && length >= codeFence.length && !fenceMatch[2].trim()) {
+        codeFence = null
       }
-
-      if (partIndex < parts.length - 1) {
-        nodes.push(<br key={`br-${key += 1}`} />)
-      }
-    })
-  }
-
-  for (const match of text.matchAll(pattern)) {
-    const matchIndex = match.index ?? 0
-    if (matchIndex > cursor) {
-      pushPlainText(text.slice(cursor, matchIndex))
+      return [line]
     }
 
-    const token = match[0]
-    const linkLabel = match[2]
-    const linkHref = match[3]
-    const boldText = match[4] || match[5]
-    const italicText = match[6] || match[7]
-
-    if (token.startsWith("`")) {
-      nodes.push(
-        <code key={`code-${key += 1}`} className="ichat-inline-code">
-          {token.slice(1, -1)}
-        </code>
-      )
-    } else if (linkLabel && linkHref) {
-      const safeHref = getSafeMarkdownHref(linkHref)
-      if (safeHref) {
-        nodes.push(
-          <a
-            key={`link-${key += 1}`}
-            href={safeHref}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="ichat-markdown-link">
-            {renderInlineMarkdown(linkLabel)}
-          </a>
-        )
-      } else {
-        pushPlainText(token)
+    if (!codeFence) {
+      const displayMathMatch = line.match(/^\s*\$\$\s*(.+?)\s*\$\$\s*$/)
+      if (displayMathMatch) {
+        return ["$$", displayMathMatch[1], "$$"]
       }
-    } else if (boldText) {
-      nodes.push(<strong key={`strong-${key += 1}`}>{renderInlineMarkdown(boldText)}</strong>)
-    } else if (italicText) {
-      nodes.push(<em key={`em-${key += 1}`}>{renderInlineMarkdown(italicText)}</em>)
-    } else {
-      pushPlainText(token)
     }
 
-    cursor = matchIndex + token.length
-  }
-
-  if (cursor < text.length) {
-    pushPlainText(text.slice(cursor))
-  }
-
-  return nodes
+    return [line]
+  }).join("\n")
 }
 
-const HEADING_TAGS: Record<HeadingLevel, "h1" | "h2" | "h3" | "h4" | "h5" | "h6"> = {
-  1: "h1",
-  2: "h2",
-  3: "h3",
-  4: "h4",
-  5: "h5",
-  6: "h6"
-}
-
-function MarkdownMessage({ text }: { text: string }) {
-  const blocks = useMemo(() => parseMarkdownBlocks(text), [text])
+const MarkdownMessage = memo(function MarkdownMessage({ text }: { text: string }) {
+  const normalizedText = useMemo(() => normalizeDisplayMath(text), [text])
 
   return (
     <div className="ichat-message-text is-markdown">
-      {blocks.map((block, index) => {
-        if (block.type === "paragraph") {
-          return <p key={`p-${index}`}>{renderInlineMarkdown(block.text)}</p>
-        }
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false, trust: false }]]}
+        components={{
+          a: ({ node: _node, href, children, className, ...props }) => {
+            const safeHref = href ? getSafeMarkdownHref(href) : null
+            if (!safeHref) {
+              return <>{children}</>
+            }
 
-        if (block.type === "heading") {
-          const HeadingTag = HEADING_TAGS[block.level]
-          return <HeadingTag key={`h-${index}`}>{renderInlineMarkdown(block.text)}</HeadingTag>
-        }
-
-        if (block.type === "blockquote") {
-          return <blockquote key={`q-${index}`}>{renderInlineMarkdown(block.text)}</blockquote>
-        }
-
-        if (block.type === "code") {
-          return (
-            <pre key={`code-${index}`} className="ichat-code-block">
-              <code data-language={block.language || undefined}>{block.text}</code>
-            </pre>
-          )
-        }
-
-        if (block.type === "table") {
-          return (
-            <div key={`table-${index}`} className="ichat-table-scroll">
-              <table className="ichat-markdown-table">
-                <thead>
-                  <tr>
-                    {block.headers.map((header, headerIndex) => (
-                      <th key={`head-${index}-${headerIndex}`} data-align={block.alignments[headerIndex]}>
-                        {renderInlineMarkdown(header)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {block.rows.map((row, rowIndex) => (
-                    <tr key={`row-${index}-${rowIndex}`}>
-                      {row.map((cell, cellIndex) => (
-                        <td key={`cell-${index}-${rowIndex}-${cellIndex}`} data-align={block.alignments[cellIndex]}>
-                          {renderInlineMarkdown(cell)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
+            return (
+              <a
+                {...props}
+                href={safeHref}
+                target="_blank"
+                rel="noreferrer noopener"
+                className={["ichat-markdown-link", className].filter(Boolean).join(" ")}>
+                {children}
+              </a>
+            )
+          },
+          table: ({ node: _node, children, className, ...props }) => (
+            <div className="ichat-table-scroll">
+              <table {...props} className={["ichat-markdown-table", className].filter(Boolean).join(" ")}>
+                {children}
               </table>
             </div>
           )
-        }
-
-        const ListTag = block.ordered ? "ol" : "ul"
-        return (
-          <ListTag key={`list-${index}`}>
-            {block.items.map((item, itemIndex) => <li key={`item-${index}-${itemIndex}`}>{renderInlineMarkdown(item)}</li>)}
-          </ListTag>
-        )
-      })}
+        }}>
+        {normalizedText}
+      </ReactMarkdown>
     </div>
   )
-}
+})
 
 function ResolvedAttachmentImage(props: {
   url: string
@@ -792,12 +506,12 @@ function AttachmentPreview(props: { part: FileUIPart }) {
   )
 }
 
-function ChatBubble({ message }: { message: UIMessage }) {
+const ChatBubble = memo(function ChatBubble({ message }: { message: UIMessage }) {
   const { t } = useI18n()
   const text = extractUiMessageText(message)
   const role = message.role
   const fileParts = extractUiMessageFiles(message)
-  const rendersMarkdown = role === "assistant"
+  const rendersMarkdown = role === "assistant" || role === "user"
   const [copied, setCopied] = useState(false)
 
   if (!text && fileParts.length === 0) {
@@ -842,7 +556,40 @@ function ChatBubble({ message }: { message: UIMessage }) {
       ) : null}
     </article>
   )
-}
+})
+
+const ConversationHistory = memo(function ConversationHistory(props: {
+  hydrated: boolean
+  messages: UIMessage[]
+  provider: ProviderId
+  currentModel: string
+}) {
+  const { t } = useI18n()
+  const { hydrated, messages, provider, currentModel } = props
+
+  if (!hydrated) {
+    return (
+      <div className="ichat-thread-empty">
+        <p className="ichat-empty-kicker">{t("chat.loading.kicker")}</p>
+        <h2>{t("chat.loading.heading")}</h2>
+      </div>
+    )
+  }
+
+  if (messages.length === 0) {
+    return (
+      <div className="ichat-thread-empty">
+        <p className="ichat-empty-kicker">{t("chat.empty.kicker")}</p>
+        <h2>{t("chat.empty.heading")}</h2>
+        <p>
+          {t("chat.empty.description", { providerLabel: providerLabels[provider], modelId: currentModel })}
+        </p>
+      </div>
+    )
+  }
+
+  return <>{messages.map((message) => <ChatBubble key={message.id} message={message} />)}</>
+})
 
 function DraftContextItem(props: {
   open: boolean
@@ -1712,24 +1459,12 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
       <div className="ichat-thread-root">
           <div ref={viewportRef} className="ichat-thread-viewport">
           <div ref={threadContentRef} className="ichat-thread-stack">
-            {!hydrated ? (
-              <div className="ichat-thread-empty">
-                <p className="ichat-empty-kicker">{t("chat.loading.kicker")}</p>
-                <h2>{t("chat.loading.heading")}</h2>
-              </div>
-            ) : null}
-
-            {hydrated && messages.length === 0 ? (
-              <div className="ichat-thread-empty">
-                <p className="ichat-empty-kicker">{t("chat.empty.kicker")}</p>
-                <h2>{t("chat.empty.heading")}</h2>
-                <p>
-                  {t("chat.empty.description", { providerLabel: providerLabels[provider], modelId: currentModel })}
-                </p>
-              </div>
-            ) : null}
-
-            {hydrated ? messages.map((message) => <ChatBubble key={message.id} message={message} />) : null}
+            <ConversationHistory
+              hydrated={hydrated}
+              messages={messages}
+              provider={provider}
+              currentModel={currentModel}
+            />
           </div>
         </div>
       </div>
