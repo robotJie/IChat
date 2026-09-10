@@ -19,6 +19,7 @@ import {
 } from "../lib/attachment-repository"
 import { normalizeImageBlob } from "../lib/media-processing"
 import { useI18n } from "../lib/i18n"
+import { useDictation } from "../lib/use-dictation"
 import { composeFlowPrompt, dispatchStatusPayload, getFlowContextMode, getProviderModel, isAutoSendEnabled, providerLabels } from "../lib/prompt-builder"
 import { createRandomId } from "../lib/random-id"
 import { getChatThreads, setChatThread, setDispatchStatus, setFlowContext, setPendingPrompt, updateFlowContextDraft } from "../lib/storage"
@@ -33,6 +34,7 @@ interface ProviderConversationProps {
   flowContext: FlowContext | null
   threadClearSignal: number
   searchOpenSignal: number
+  settingsOpen: boolean
 }
 
 interface FlowContextEditorState {
@@ -900,13 +902,15 @@ function DraftContextModal(props: {
   )
 }
 
-export function ProviderConversation({ provider, settings, apiKeys, pendingPrompt, flowContext, threadClearSignal, searchOpenSignal }: ProviderConversationProps) {
-  const { t } = useI18n()
+export function ProviderConversation({ provider, settings, apiKeys, pendingPrompt, flowContext, threadClearSignal, searchOpenSignal, settingsOpen }: ProviderConversationProps) {
+  const { t, locale } = useI18n()
   const currentModel = getProviderModel(settings, provider)
   const currentKey = getProviderKey(provider, apiKeys)
   const [hydrated, setHydrated] = useState(false)
   const [messages, setMessages] = useState<UIMessage[]>([])
   const [composerText, setComposerText] = useState("")
+  const dictation = useDictation(locale === "zh-CN" ? "zh-CN" : "en-US", setComposerText)
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null)
   const [isBusy, setIsBusy] = useState(false)
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
   const [draftContextOpen, setDraftContextOpen] = useState(false)
@@ -931,6 +935,17 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
   const activeEditorContextIdRef = useRef<string | null>(null)
   const lastEditorSignatureRef = useRef("")
   const lastSearchOpenSignalRef = useRef(searchOpenSignal)
+
+  useEffect(() => {
+    dictation.cancel()
+  }, [provider, locale, threadClearSignal, isBusy, settingsOpen, dictation.cancel])
+
+  useEffect(() => {
+    const input = composerInputRef.current
+    if (!input) return
+    input.style.height = "auto"
+    input.style.height = `${Math.min(input.scrollHeight, 220)}px`
+  }, [composerText])
 
   const closeConversationSearch = useCallback(() => {
     setSearchOpen(false)
@@ -1637,6 +1652,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
   }, [])
 
   const handleComposerSubmit = useCallback(async () => {
+    if (isBusyRef.current || dictation.active || visionBlocked) return
     const value = composerText.trim()
     const hasComposerImages = composerAttachments.length > 0
     if (!value && !attachmentPrompt && !hasComposerImages) {
@@ -1668,7 +1684,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
     setComposerText("")
     setComposerAttachments([])
     await runSendPipeline(value || requestText, "manual", contextDraft, requestText, fileParts)
-  }, [attachmentFlowContext, attachmentPrompt, buildFilePartsForAttachments, composerAttachments, composerText, contextImageAttachments, currentKey, editorState, runSendPipeline])
+  }, [attachmentFlowContext, attachmentPrompt, buildFilePartsForAttachments, composerAttachments, composerText, contextImageAttachments, currentKey, dictation.active, editorState, runSendPipeline, visionBlocked])
 
   const handleStop = useCallback(() => {
     abortControllerRef.current?.abort()
@@ -1685,7 +1701,9 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
 
   const missingKey = !currentKey
   const modalReadOnly = isBusy || attachmentPrompt?.status === "processing"
-  const canSubmit = !isBusy && !visionBlocked && (Boolean(composerText.trim()) || Boolean(attachmentPrompt) || composerAttachments.length > 0)
+  const canSubmit = !isBusy && !dictation.active && !visionBlocked && (Boolean(composerText.trim()) || Boolean(attachmentPrompt) || composerAttachments.length > 0)
+  const sendLabel = isBusy ? t("chat.composer.stop") : allActiveAttachments.length > 0 ? t("chat.composer.sendWithImages") : attachmentPrompt ? t("chat.composer.sendWithContext") : t("chat.composer.send")
+  const dictationLabel = dictation.active ? t("chat.dictation.stop") : t("chat.dictation.start")
   const activeBanner = visionBlocked ? visionBlockedMessage : errorBanner
 
   return (
@@ -1785,7 +1803,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
         </div>
       </div>
 
-      <div className="ichat-composer-shell">
+      <div className={`ichat-composer-shell${dictation.active ? " is-listening" : ""}`}>
         {attachmentPrompt || allActiveAttachments.length > 0 ? (
           <div className="ichat-composer-attachments">
             {attachmentPrompt && attachmentFlowContext ? (
@@ -1817,9 +1835,12 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
         ) : null}
 
         <textarea
+          ref={composerInputRef}
           className="ichat-composer-input"
-          rows={3}
+          rows={2}
           value={composerText}
+          aria-label={t("chat.composer.inputLabel")}
+          readOnly={dictation.active}
           placeholder={
             attachmentPrompt
               ? t("chat.composer.placeholder.withContext")
@@ -1830,20 +1851,63 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
           onChange={(event) => setComposerText(event.target.value)}
           onPaste={(event) => void handleComposerPaste(event)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
+            if (event.key === "Escape" && dictation.active) {
               event.preventDefault()
-              void handleComposerSubmit()
+              dictation.stop()
+            }
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) {
+              event.preventDefault()
+              if (canSubmit) void handleComposerSubmit()
             }
           }}
         />
         <div className="ichat-composer-actions">
-          <button className="ichat-secondary-button" type="button" onClick={handleStop} disabled={!isBusy}>
-            {t("chat.composer.stop")}
+          <span className="ichat-dictation-status" role="status">
+            {dictation.phase !== "idle" ? t(`chat.dictation.${dictation.phase}`) : null}
+          </span>
+          <button
+            className={`ichat-composer-button${dictation.active ? " is-recording" : ""}`}
+            type="button"
+            aria-label={dictationLabel}
+            title={dictation.active ? dictationLabel : `${dictationLabel} · ${t("chat.dictation.service")}`}
+            aria-pressed={dictation.active}
+            disabled={isBusy || dictation.phase === "stopping"}
+            onClick={() => {
+              if (dictation.active) {
+                dictation.stop()
+              } else {
+                const input = composerInputRef.current
+                dictation.start(composerText, input?.selectionStart, input?.selectionEnd)
+              }
+            }}>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.7" />
+              <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-3 0h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+            </svg>
           </button>
-          <button className="ichat-primary-button" type="button" onClick={() => void handleComposerSubmit()} disabled={!canSubmit}>
-            {isBusy ? t("chat.composer.sending") : allActiveAttachments.length > 0 ? t("chat.composer.sendWithImages") : attachmentPrompt ? t("chat.composer.sendWithContext") : t("chat.composer.send")}
+          <button
+            className="ichat-composer-button is-send"
+            type="button"
+            aria-label={sendLabel}
+            title={sendLabel}
+            onClick={isBusy ? handleStop : () => void handleComposerSubmit()}
+            disabled={!isBusy && !canSubmit}>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              {isBusy ? <rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" /> :
+                <path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />}
+            </svg>
           </button>
         </div>
+        {dictation.error ? (
+          <div className="ichat-dictation-error" role="alert">
+            {t(`chat.dictation.error.${dictation.error}`)}
+            {dictation.error === "permission" ? (
+              <a href={chrome.runtime.getURL(`tabs/microphone.html?lang=${locale}`)} target="_blank" rel="noreferrer">
+                {t("chat.dictation.permission.open")}
+              </a>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {draftContextOpen && attachmentPrompt && attachmentFlowContext && editorState ? (
