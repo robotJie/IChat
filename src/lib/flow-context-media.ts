@@ -115,6 +115,15 @@ async function resolveFromInlineOrPage(flowContext: FlowContext, attachment: Flo
 }
 
 async function resolveFromScreenshot(flowContext: FlowContext, attachment: FlowContextAttachmentMeta) {
+  // Keep the PDF screenshot taken while its tab was active; do not recapture later.
+  if (attachment.resolutionHint?.inlineDataUrl) {
+    return {
+      blob: await dataUrlToBlob(attachment.resolutionHint.inlineDataUrl),
+      origin: "screenshot-fallback" as FlowContextAttachmentOrigin,
+      mediaType: "image/png",
+      captureIntegrity: attachment.captureIntegrity ?? ("partial" as const)
+    }
+  }
   const cropRect = attachment.resolutionHint?.cropRect || attachment.rect
   if (!isVisibleCropRect(cropRect)) {
     throw new Error("The target image is not sufficiently visible for screenshot fallback")

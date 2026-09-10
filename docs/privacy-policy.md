@@ -4,7 +4,7 @@ title: Privacy Policy
 
 # IChat Privacy Policy
 
-Last updated: March 27, 2026
+Last updated: September 10, 2026
 
 This Privacy Policy explains how IChat handles information when you use the extension.
 
@@ -47,6 +47,8 @@ When you explicitly trigger capture, IChat may collect:
 - locator metadata such as XPath or CSS path
 - viewport and document metadata
 
+When you click **Capture selected text with IChat** in the selection context menu, Chrome supplies the selected text and available page/frame metadata directly to IChat. This also supports text selections supplied by Chrome's PDF viewer. This path does not read or write the clipboard, take screenshots, or extract surrounding text. It stores the selection locally as FlowContext and follows the existing auto-send setting when sending to the selected provider. The `contextMenus` permission is used to provide this explicit capture action.
+
 ### 3. Captured Media
 
 If the current target includes an image, IChat may process:
@@ -56,6 +58,8 @@ If the current target includes an image, IChat may process:
 - image metadata such as type, dimensions, alt text, caption text, and nearby text
 
 If direct media resolution is not available, IChat may use screenshot-based fallback for the visible area needed to complete the requested capture.
+
+For online PDFs opened in Chrome's native PDF viewer, triggering capture with the extension action or keyboard shortcut takes an image of the currently visible tab area, including visible PDF viewer controls. It does not extract the full PDF or the exact text selection. This image follows the same local IndexedDB storage and selected-provider image sending flow, including your auto-send setting. The screenshot fallback uses existing permissions and no remote PDF processing service.
 
 ### 4. Local Chat State
 
@@ -73,6 +77,7 @@ IChat handles page context only when you explicitly trigger extension behavior, 
 
 - clicking the extension action
 - using the configured capture shortcut
+- clicking IChat's selected-text context menu item
 - sending a message with attached captured context
 
 ## Where Data Is Stored

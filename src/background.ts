@@ -3,11 +3,40 @@ import { resolveFlowContextAttachments } from "./lib/flow-context-media"
 import { ensureDefaults, getAppState, setCaptureStatus, setDispatchStatus, setFlowContext, setPendingPrompt, updateSettings } from "./lib/storage"
 import { getVisionBlockedMessage, supportsVisionInput } from "./lib/vision-capabilities"
 import type { FlowContext } from "./lib/types"
+import { capturePdfViewport, isPdfTab } from "./lib/pdf-capture"
+import { createI18n, resolveLocale } from "./lib/i18n-core"
+import { buildContextMenuSelection, CAPTURE_SELECTION_MENU_ID } from "./lib/context-menu-capture"
+import { STORAGE_KEYS } from "./lib/storage-keys"
 
 let lastWindowId: number = chrome.windows.WINDOW_ID_CURRENT
 const DEBUG_CAPTURE = true
 const CAPTURE_PING_ATTEMPTS = 12
 const CAPTURE_PING_DELAY_MS = 250
+let contextMenuSync: Promise<void> = Promise.resolve()
+
+function syncSelectionContextMenu() {
+  // Installation and a settings update can arrive together; keep one menu item.
+  contextMenuSync = contextMenuSync.catch(() => {}).then(async () => {
+    const { settings } = await getAppState()
+    const title = createI18n(resolveLocale(settings)).t("capture.menu.selection")
+    await new Promise<void>((resolve, reject) => {
+      chrome.contextMenus.update(CAPTURE_SELECTION_MENU_ID, { title }, () => {
+        if (!chrome.runtime.lastError) {
+          resolve()
+          return
+        }
+        chrome.contextMenus.create({
+          id: CAPTURE_SELECTION_MENU_ID, title, contexts: ["selection"]
+        }, () => {
+          const error = chrome.runtime.lastError
+          if (error) reject(new Error(error.message))
+          else resolve()
+        })
+      })
+    })
+  })
+  return contextMenuSync
+}
 
 function debugCapture(stage: string, payload?: unknown) {
   if (!DEBUG_CAPTURE) {
@@ -54,10 +83,34 @@ function summarizeFlowContext(flowContext: FlowContext | null | undefined) {
 chrome.runtime.onInstalled.addListener(async () => {
   await ensureDefaults()
   await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+  await syncSelectionContextMenu()
 })
 
 chrome.runtime.onStartup.addListener(async () => {
   await ensureDefaults()
+  await syncSelectionContextMenu()
+})
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "local" && changes[STORAGE_KEYS.settings]) {
+    void syncSelectionContextMenu().catch((error) => console.debug("IChat context menu update failed", error))
+  }
+})
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId !== CAPTURE_SELECTION_MENU_ID || !tab || tab.id == null || !info.selectionText?.trim()) {
+    return
+  }
+
+  // Open synchronously in the user gesture, using the clicked window rather than the last active one.
+  const panelOpened = chrome.sidePanel.open({ windowId: tab.windowId })
+  void panelOpened.then(async () => {
+    const flowContext = buildContextMenuSelection(info, tab)
+    if (!flowContext) return
+    await ensureDefaults()
+    await setPendingPrompt(null)
+    await handleCapturedFlowContext(flowContext)
+  }).catch(handleCaptureCommandError)
 })
 
 chrome.tabs.onActivated.addListener(({ windowId }) => {
@@ -165,6 +218,13 @@ async function handleCaptureCommand() {
     setDispatchStatus(dispatchStatusPayload("idle", "Waiting for new context", null, null)),
     setPendingPrompt(null)
   ])
+
+  if (await isPdfTab(tab)) {
+    const { settings } = await getAppState()
+    const { t } = createI18n(resolveLocale(settings))
+    await handleCapturedFlowContext(await capturePdfViewport(tab, t))
+    return
+  }
 
   await ensureContentScriptInjected(tab.id)
   await pingPage(tab.id)
@@ -282,11 +342,15 @@ async function handleCapturedFlowContext(flowContext: FlowContext) {
   const autoSendEnabled = isAutoSendEnabled(settings)
   const modelId = getProviderModel(settings, activeProvider)
   const modelSupportsVision = supportsVisionInput(activeProvider, modelId)
-  const captureMessage = resolvedFlowContext.primaryCaptureKind === "image"
-    ? "Captured image context and surrounding text"
-    : resolvedFlowContext.trigger.mode === "selection"
-      ? "Captured selected text and surrounding context"
-      : "Captured smart DOM context"
+  const captureMessage = resolvedFlowContext.trigger.source === "pdf-viewport"
+    ? createI18n(resolveLocale(settings)).t("capture.pdf.captured")
+    : resolvedFlowContext.trigger.source === "context-menu"
+      ? createI18n(resolveLocale(settings)).t("capture.menu.captured")
+      : resolvedFlowContext.primaryCaptureKind === "image"
+        ? "Captured image context and surrounding text"
+        : resolvedFlowContext.trigger.mode === "selection"
+          ? "Captured selected text and surrounding context"
+          : "Captured smart DOM context"
 
   if (pendingPrompt.requiresVision && !modelSupportsVision) {
     const blockedMessage = getVisionBlockedMessage(activeProvider, modelId)

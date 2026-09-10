@@ -18,7 +18,7 @@ Example scenario:
 
 ![](./assets/sample.png)
 
-There are two main capture paths in IChat:
+On ordinary web pages, the shortcut supports two capture paths:
 
 - Selection capture:
   Select the text you care about first, then press `Ctrl+Shift+Y` (the default shortcut) to capture the selected text together with nearby implicit context.
@@ -33,6 +33,14 @@ There are two main capture paths in IChat:
 - native side panel chat UI
 - detached chat tab
 - BYOK support for OpenAI-compatible providers, Gemini, and Anthropic
+
+### Right-click Selected Text
+
+Select text on a web page or in Chrome's PDF viewer, right-click the selection, and choose **Capture selected text with IChat**. IChat opens the side panel and uses the text Chrome supplies as the new FlowContext. Auto-send on sends it through the configured provider flow; auto-send off leaves a draft ready for your question. This path uses plain text, requires no vision model or OCR, and does not touch the clipboard. It captures the selected text and available source metadata only, not surrounding paragraphs. The menu appears only when Chrome provides a text selection and follows IChat's UI language setting.
+
+### Online PDFs
+
+In Chrome's native PDF viewer, use the extension action or capture shortcut to attach the currently visible tab area as an image. A vision-capable model is required. Zoom and scroll to the content you want before capturing; the image can include viewer controls and portions of multiple pages. This captures neither the full document nor the exact text selection. Auto-send follows your existing setting; turn it off in Settings to review the attachment before sending. Local `file://` PDFs and PDFs embedded within ordinary web pages are not covered by this fallback.
 
 ## How To Use IChat
 
@@ -63,6 +71,7 @@ You can open IChat by:
 
 - clicking the extension action
 - using the configured capture shortcut, which defaults to `Ctrl+Shift+Y`
+- selecting text and choosing **Capture selected text with IChat** from the right-click menu
 
 ### 3. Settings
 
@@ -113,6 +122,7 @@ IChat currently needs Chrome extension capabilities related to:
 - interacting with the active page for capture
 - side panel presentation
 - content script injection and page scripting needed for capture
+- `contextMenus` for the explicit selected-text capture menu, including PDF selections
 
 ## How Capture Works
 

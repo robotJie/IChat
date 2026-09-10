@@ -30,7 +30,7 @@ It helps you capture context from the current web page and send it to your selec
 1. Open the IChat side panel
 2. In `Settings`, add your API key and choose a provider
 3. Open a normal `http` or `https` page
-4. Trigger capture from the extension action or shortcut
+4. Trigger capture from the extension action or shortcut, or select text and right-click **Capture selected text with IChat** (also available for text selections in Chrome's PDF viewer)
 5. Review or send the captured context in the chat UI
 
 ## Documentation

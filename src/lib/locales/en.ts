@@ -1,4 +1,9 @@
 export const enCatalog = {
+  "capture.menu.selection": "Capture selected text with IChat",
+  "capture.menu.captured": "Captured selected text from the context menu.",
+  "capture.pdf.captured": "Captured the visible PDF area as an image (not the full document or selected text).",
+  "capture.pdf.description": "Screenshot of the currently visible PDF viewer area only. The full PDF and exact text selection were not extracted. Read the visible content in the attached image; do not assume access to other pages.",
+  "capture.pdf.tabChanged": "The PDF tab changed or is still loading. Return to it, wait for the page to load, and capture again.",
   "common.close": "Close",
   "common.backToApp": "Back to app",
   "common.settings": "Settings",

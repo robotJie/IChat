@@ -1,6 +1,11 @@
 import type { TranslationCatalog } from "./en"
 
 export const zhCNCatalog = {
+  "capture.menu.selection": "用 IChat 捕获选中文字",
+  "capture.menu.captured": "已通过右键菜单捕获选中文字。",
+  "capture.pdf.captured": "已将 PDF 当前可见区域捕获为图片（非全文或精确选中文字）。",
+  "capture.pdf.description": "此附件仅为 PDF 阅读器当前可见区域的截图。未提取整份 PDF 或精确选中文字。请读取附件图片中的可见内容，不要假定能够访问其他页面。",
+  "capture.pdf.tabChanged": "PDF 标签页已切换或仍在加载。请返回该页面，等待加载完成后重新捕获。",
   "settings.context.systemInstructions.copy": "\u590d\u5236",
   "common.close": "关闭",
   "common.backToApp": "返回应用",
