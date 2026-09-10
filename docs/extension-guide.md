@@ -103,6 +103,16 @@ Open **Settings** and add one of the following:
 - **FlowContext system instructions** act as the system prompt and can be customized.
 - **Inspect FlowContext** lets you review the current captured fields and prompt content.
 
+## Voice Input And Composer
+
+The composer combines the text area and its controls in one panel. The arrow sends the draft; during generation it becomes a square that stops the response. Enter sends, Shift+Enter adds a line break, and confirming text with an input method does not send.
+
+Click the microphone to dictate in the interface language (English or Simplified Chinese). Text appears at the cursor, or replaces the selected text, while preserving the rest of the draft. While listening, editing and sending are paused. Click the microphone again (or press Escape in the input) to finish, then edit and send. Dictation never sends the draft automatically.
+
+If microphone access is denied or the side panel cannot display a permission prompt, click **Allow microphone** in the error message. Grant access in the extension tab, return to the chat, and click the microphone again. Unsupported browsers, device failures, and unavailable speech services show an error while keeping the draft available for typing.
+
+Dictation uses browser speech recognition, which may send audio to the browser's service provider and require a working network connection. It does not use your chat model API key. IChat does not store audio. Closing or leaving the chat stops recognition; listening never restarts automatically. You can revoke microphone access in Chrome or system settings.
+
 ## Local Storage And Data Flow
 
 In the current implementation:
@@ -111,6 +121,7 @@ In the current implementation:
 - FlowContext and chat snapshots are stored locally
 - image attachments are stored in IndexedDB
 - requests are sent directly to the selected provider
+- optional voice dictation may send audio to the browser's speech service; recognized draft text is sent to the chat provider only when you send it
 
 For more detail, see the [Privacy Policy](./privacy-policy.md).
 

@@ -466,6 +466,7 @@ export function IChatApp({ viewMode }: IChatAppProps) {
             flowContext={appState.flowContext}
             threadClearSignal={threadClearSignals[activeProvider]}
             searchOpenSignal={threadSearchSignal}
+            settingsOpen={settingsOpen}
           />
         </div>
 

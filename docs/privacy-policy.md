@@ -69,6 +69,16 @@ Stored locally:
 - pending prompts
 - capture status and dispatch status
 
+### 5. Optional Voice Dictation
+
+Clicking the microphone in the composer starts browser speech recognition after microphone access is allowed. Recognition may send microphone audio to the browser's speech service provider (for example, Google's service in Chrome), independently of your selected chat provider. Network access and service availability may be required; offline recognition is not guaranteed.
+
+IChat does not record or store audio. Recognized text is inserted into the unsent draft. When you send it, the text follows the same provider request and local chat storage flow as typed messages. Stopping dictation, leaving the chat view, or closing the page stops recognition. Listening never restarts automatically.
+
+If the side panel cannot obtain microphone permission, an optional extension tab lets you grant access. It briefly opens the microphone and immediately stops all audio tracks without recording or sending audio to a chat provider. No additional manifest or host permissions are added for dictation. You can revoke microphone access in Chrome or system settings.
+
+The browser's speech service handles audio under its own terms, privacy policy, and retention rules.
+
 ## When Data Is Collected
 
 IChat does not continuously monitor all browsing activity for remote processing.

@@ -597,8 +597,7 @@ a:focus-visible {
 
 .ichat-settings-input,
 .ichat-context-editor-input,
-.ichat-context-editor-textarea,
-.ichat-composer-input {
+.ichat-context-editor-textarea {
   width: 100%;
   border-radius: 14px;
   border: 1px solid var(--ichat-line-strong);
@@ -614,8 +613,7 @@ a:focus-visible {
 
 .ichat-settings-input:focus,
 .ichat-context-editor-input:focus,
-.ichat-context-editor-textarea:focus,
-.ichat-composer-input:focus {
+.ichat-context-editor-textarea:focus {
   outline: none;
   border-color: rgba(159, 195, 255, 0.9);
   box-shadow: 0 0 0 4px rgba(159, 195, 255, 0.14);
@@ -1304,7 +1302,16 @@ a:focus-visible {
 .ichat-composer-shell {
   flex-shrink: 0;
   padding: 10px;
-  background: #17181a;
+  background: #262729;
+  transition: border-color 160ms ease;
+}
+
+.ichat-composer-shell:focus-within {
+  border-color: var(--ichat-line-strong);
+}
+
+.ichat-composer-shell.is-listening {
+  border-color: var(--ichat-accent);
 }
 
 .ichat-composer-attachments {
@@ -1505,14 +1512,103 @@ a:focus-visible {
 }
 
 .ichat-composer-input {
-  resize: vertical;
-  min-height: 72px;
+  display: block;
+  width: 100%;
+  resize: none;
+  min-height: 64px;
   max-height: 220px;
+  padding: 6px 6px 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ichat-text);
+  line-height: 1.5;
+  overflow-y: auto;
+}
+
+.ichat-composer-input:focus-visible {
+  outline: none;
+}
+
+.ichat-composer-input::placeholder {
+  color: var(--ichat-dim);
 }
 
 .ichat-composer-actions {
   justify-content: flex-end;
-  margin-top: 10px;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.ichat-composer-button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ichat-text);
+  cursor: pointer;
+}
+
+.ichat-composer-button svg {
+  width: 22px;
+  height: 22px;
+}
+
+.ichat-composer-button:hover:not(:disabled) {
+  background: #393c41;
+}
+
+.ichat-composer-button.is-send {
+  background: #2c68ce;
+  color: #fff;
+}
+
+.ichat-composer-button.is-send:hover:not(:disabled) {
+  background: #3879e5;
+}
+
+.ichat-composer-button.is-recording {
+  color: var(--ichat-danger);
+  background: rgba(255, 141, 141, 0.12);
+}
+
+.ichat-composer-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ichat-dictation-status {
+  margin-right: auto;
+  padding-left: 6px;
+  font-size: 12px;
+  color: var(--ichat-muted);
+}
+
+.ichat-dictation-error {
+  margin: 8px 6px 2px;
+  color: var(--ichat-danger);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.ichat-dictation-error a {
+  display: inline-block;
+  margin-left: 6px;
+  color: var(--ichat-accent);
+}
+
+.ichat-microphone-page {
+  max-width: 520px;
+  margin: 12vh auto;
+  padding: 28px;
+  line-height: 1.6;
 }
 
 .ichat-modal-overlay {
