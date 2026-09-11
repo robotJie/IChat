@@ -10,8 +10,9 @@ export const DEFAULT_MODELS: Record<ProviderId, string> = {
 }
 
 export const DEFAULT_SETTINGS: IChatSettings = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   uiLanguage: "system",
+  stt: { provider: "chrome" },
   providers: {
     active: "openai",
     models: { ...DEFAULT_MODELS },
@@ -41,7 +42,9 @@ export const DEFAULT_SETTINGS: IChatSettings = {
 export const EMPTY_API_KEYS: IChatApiKeys = {
   openai: "",
   gemini: "",
-  anthropic: ""
+  anthropic: "",
+  funAsr: "",
+  moss: ""
 }
 
 export const EMPTY_THREADS: ProviderThreads = {

@@ -909,7 +909,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
   const [hydrated, setHydrated] = useState(false)
   const [messages, setMessages] = useState<UIMessage[]>([])
   const [composerText, setComposerText] = useState("")
-  const dictation = useDictation(locale === "zh-CN" ? "zh-CN" : "en-US", setComposerText)
+  const dictation = useDictation(locale === "zh-CN" ? "zh-CN" : "en-US", setComposerText, settings.stt.provider, settings.stt.provider === "moss" ? apiKeys.moss : apiKeys.funAsr)
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null)
   const [isBusy, setIsBusy] = useState(false)
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
@@ -1703,7 +1703,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
   const modalReadOnly = isBusy || attachmentPrompt?.status === "processing"
   const canSubmit = !isBusy && !dictation.active && !visionBlocked && (Boolean(composerText.trim()) || Boolean(attachmentPrompt) || composerAttachments.length > 0)
   const sendLabel = isBusy ? t("chat.composer.stop") : allActiveAttachments.length > 0 ? t("chat.composer.sendWithImages") : attachmentPrompt ? t("chat.composer.sendWithContext") : t("chat.composer.send")
-  const dictationLabel = dictation.active ? t("chat.dictation.stop") : t("chat.dictation.start")
+  const dictationLabel = dictation.phase === "transcribing" ? t("chat.dictation.cancel") : dictation.active ? t("chat.dictation.stop") : t("chat.dictation.start")
   const activeBanner = visionBlocked ? visionBlockedMessage : errorBanner
 
   return (
@@ -1869,7 +1869,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
             className={`ichat-composer-button${dictation.active ? " is-recording" : ""}`}
             type="button"
             aria-label={dictationLabel}
-            title={dictation.active ? dictationLabel : `${dictationLabel} · ${t("chat.dictation.service")}`}
+            title={dictation.active ? dictationLabel : `${dictationLabel} · ${t(settings.stt.provider === "moss" ? "chat.dictation.mossService" : settings.stt.provider === "fun-asr" ? "chat.dictation.funAsrService" : "chat.dictation.service")}`}
             aria-pressed={dictation.active}
             disabled={isBusy || dictation.phase === "stopping"}
             onClick={() => {
@@ -1881,8 +1881,10 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
               }
             }}>
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              {dictation.phase === "transcribing" ? <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /> : <>
               <rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.7" />
               <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-3 0h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              </>}
             </svg>
           </button>
           <button
@@ -1901,9 +1903,10 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
         {dictation.error ? (
           <div className="ichat-dictation-error" role="alert">
             {t(`chat.dictation.error.${dictation.error}`)}
-            {dictation.error === "permission" ? (
+            {dictation.errorDetails ? <div>{dictation.errorDetails}</div> : null}
+            {dictation.error === "permission" || dictation.error === "noSpeech" ? (
               <a href={chrome.runtime.getURL(`tabs/microphone.html?lang=${locale}`)} target="_blank" rel="noreferrer">
-                {t("chat.dictation.permission.open")}
+                {t(dictation.error === "noSpeech" ? "chat.dictation.test.title" : "chat.dictation.permission.open")}
               </a>
             ) : null}
           </div>

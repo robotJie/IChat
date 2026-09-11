@@ -3,7 +3,9 @@ import type { ReactNode } from "react"
 import { getActiveProvider, getFlowContextMode, getProviderModel, isAutoSendEnabled, providerLabels } from "../lib/prompt-builder"
 import { getDefaultFlowContextSystemInstructionsForSettings } from "../lib/flowcontext-system-instructions"
 import { useI18n } from "../lib/i18n"
-import type { AppState, FlowContext, IChatSettingsUpdate, ProviderId, UiLanguage } from "../lib/types"
+import type { AppState, FlowContext, IChatApiKeys, IChatSettingsUpdate, ProviderId, SttProviderId, UiLanguage } from "../lib/types"
+import { FUN_ASR_MODEL } from "../lib/fun-asr"
+import { MOSS_STT_MODEL } from "../lib/moss-stt"
 
 interface SettingsWorkspaceProps {
   appState: AppState
@@ -15,7 +17,7 @@ interface SettingsWorkspaceProps {
   onOpenDetachedTab: () => void
   onProviderChange: (provider: ProviderId) => void | Promise<void>
   onModelChange: (provider: ProviderId, model: string) => void | Promise<void>
-  onApiKeyChange: (provider: ProviderId, value: string) => void | Promise<void>
+  onApiKeyChange: (provider: keyof IChatApiKeys, value: string) => void | Promise<void>
   onProviderSearchChange: (provider: ProviderId, enabled: boolean) => void | Promise<void>
   onOpenAIEndpointChange: (value: string) => void | Promise<void>
   onHistoryMessageLimitChange: (value: number) => void | Promise<void>
@@ -27,7 +29,7 @@ interface SettingsWorkspaceProps {
   onResetContext: () => void | Promise<void>
 }
 
-type SettingsSectionId = "general" | "providers" | "context" | "about" | "sponsor"
+type SettingsSectionId = "general" | "providers" | "stt" | "context" | "about" | "sponsor"
 
 interface CommandBindingSummary {
   name: string
@@ -61,6 +63,7 @@ function getSettingsSections(t: ReturnType<typeof useI18n>["t"]): Array<{ id: Se
   return [
     { id: "general", label: t("settings.sections.general.label"), description: t("settings.sections.general.description") },
     { id: "providers", label: t("settings.sections.providers.label"), description: t("settings.sections.providers.description") },
+    { id: "stt", label: t("settings.stt.title"), description: t("settings.stt.description") },
     { id: "context", label: t("settings.sections.context.label"), description: t("settings.sections.context.description") },
     { id: "about", label: t("settings.sections.about.label"), description: t("settings.sections.about.description") },
     { id: "sponsor", label: t("settings.sections.sponsor.label"), description: t("settings.sections.sponsor.description") }
@@ -591,6 +594,58 @@ function SponsorQrCard(props: {
   )
 }
 
+function SttSettings({ appState, onSettingsChange, onApiKeyChange }: Pick<SettingsWorkspaceProps, "appState" | "onSettingsChange" | "onApiKeyChange">) {
+  const { t } = useI18n()
+  const [keyDrafts, setKeyDrafts] = useState({ funAsr: appState.apiKeys.funAsr, moss: appState.apiKeys.moss })
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState(false)
+  const selected = appState.settings.stt.provider
+  const keyField = selected === "moss" ? "moss" : "funAsr"
+  const keyDraft = keyDrafts[keyField]
+  const saveKey = async () => {
+    setSaving(true)
+    setSaveError(false)
+    try {
+      await onApiKeyChange(keyField, keyDraft.trim())
+    } catch {
+      setSaveError(true)
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <section className="ichat-settings-page-section">
+      <SettingsSectionHeader title={t("settings.stt.title")} description={t("settings.stt.description")} />
+      <div className="ichat-settings-provider-grid" role="radiogroup" aria-label={t("settings.stt.provider")}>
+        {(["chrome", "fun-asr", "moss"] as SttProviderId[]).map((provider) => (
+          <label key={provider} className={`ichat-settings-provider-card ichat-stt-option ${selected === provider ? "is-active" : ""}`}>
+            <input type="radio" name="stt-provider" value={provider} checked={selected === provider} disabled={saving} onChange={() => {
+              setSaveError(false)
+              void Promise.resolve(onSettingsChange({ stt: { provider } })).catch(() => setSaveError(true))
+            }} />
+            <span><strong>{t(provider === "chrome" ? "settings.stt.chrome" : provider === "moss" ? "settings.stt.moss" : "settings.stt.funAsr")}</strong><small>{t(provider === "chrome" ? "settings.stt.chromeNote" : provider === "moss" ? "settings.stt.mossNote" : "settings.stt.funAsrNote")}</small></span>
+          </label>
+        ))}
+      </div>
+      {selected !== "chrome" ? (
+        <div className="ichat-stt-config">
+          <p>{t(selected === "moss" ? "settings.stt.mossModel" : "settings.stt.model", { model: selected === "moss" ? MOSS_STT_MODEL : FUN_ASR_MODEL })}</p>
+          <label className="ichat-settings-field">
+            <span>{t(selected === "moss" ? "settings.stt.mossApiKey" : "settings.stt.apiKey")}</span>
+            <input type="password" autoComplete="off" spellCheck={false} className="ichat-settings-input" placeholder="sk-…" value={keyDraft} onChange={(event) => setKeyDrafts((current) => ({ ...current, [keyField]: event.target.value }))} />
+          </label>
+          <p>{t(selected === "moss" ? "settings.stt.mossKeyNote" : "settings.stt.keyNote")}</p>
+          <div className="ichat-settings-actions-row">
+            <button className="ichat-primary-button" type="button" disabled={saving || keyDraft.trim() === appState.apiKeys[keyField]} onClick={() => void saveKey()}>{t("settings.stt.saveKey")}</button>
+            <span role="status">{keyDraft.trim() === appState.apiKeys[keyField] && appState.apiKeys[keyField] ? t("settings.stt.saved") : t("settings.stt.saveHint")}</span>
+          </div>
+        </div>
+      ) : null}
+      {saveError ? <p role="alert">{t("settings.stt.saveError")}</p> : null}
+    </section>
+  )
+}
+
 export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const { locale, t } = useI18n()
   const {
@@ -930,6 +985,10 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
           </div>
         </section>
       )
+    }
+
+    if (activeSection === "stt") {
+      return <SttSettings appState={appState} onSettingsChange={onSettingsChange} onApiKeyChange={onApiKeyChange} />
     }
 
     if (activeSection === "providers") {

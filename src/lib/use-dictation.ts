@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { startAudioRecording, type AudioRecording } from "./audio-recording"
+import { MAX_RECORDING_SECONDS, SttServiceError, transcribeFunAsr, type SttServiceErrorCode } from "./fun-asr"
+import type { SttProviderId } from "./types"
+import { transcribeMoss } from "./moss-stt"
 
 // Web Speech is still prefixed in Chrome and is not included in lib.dom.
 interface Recognition {
@@ -15,8 +19,18 @@ interface Recognition {
 }
 
 type RecognitionConstructor = new () => Recognition
-type DictationPhase = "idle" | "starting" | "listening" | "stopping"
-export type DictationError = "unsupported" | "permission" | "network" | "microphone" | "noSpeech" | "failed"
+type DictationPhase = "idle" | "starting" | "listening" | "stopping" | "recording" | "transcribing"
+export type DictationError = "unsupported" | "permission" | "microphone" | "failed" | SttServiceErrorCode
+
+interface CloudSession {
+  provider: Exclude<SttProviderId, "chrome">
+  controller: AbortController
+  recording?: AudioRecording
+  finishing: boolean
+  apiKey: string
+  language: string
+  apply: (text: string) => void
+}
 
 function getRecognitionConstructor() {
   const speechWindow = window as Window & {
@@ -26,10 +40,12 @@ function getRecognitionConstructor() {
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition
 }
 
-export function useDictation(lang: string, onText: (text: string) => void) {
+export function useDictation(lang: string, onText: (text: string) => void, provider: SttProviderId = "chrome", apiKey = "") {
   const [phase, setPhase] = useState<DictationPhase>("idle")
   const [error, setError] = useState<DictationError | null>(null)
+  const [errorDetails, setErrorDetails] = useState<string | null>(null)
   const recognitionRef = useRef<Recognition | null>(null)
+  const cloudRef = useRef<CloudSession | null>(null)
   const stopRequestedRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onTextRef = useRef(onText)
@@ -38,6 +54,10 @@ export function useDictation(lang: string, onText: (text: string) => void) {
   const release = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = null
+    const cloud = cloudRef.current
+    cloudRef.current = null
+    cloud?.controller.abort()
+    cloud?.recording?.cancel()
     const recognition = recognitionRef.current
     recognitionRef.current = null
     if (recognition) {
@@ -64,9 +84,91 @@ export function useDictation(lang: string, onText: (text: string) => void) {
     }
   }, [cancel, release])
 
-  const start = useCallback((text: string, selectionStart = text.length, selectionEnd = selectionStart) => {
-    if (recognitionRef.current) return
+  useEffect(() => {
+    cancel()
     setError(null)
+    setErrorDetails(null)
+  }, [provider, apiKey, lang, cancel])
+
+  const finishCloud = useCallback(async () => {
+    const session = cloudRef.current
+    if (!session) return
+    if (!session.recording || session.finishing) {
+      cancel()
+      return
+    }
+    session.finishing = true
+    setPhase("transcribing")
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      setError("timeout")
+      cancel()
+    }, 45000)
+    try {
+      const audio = await session.recording.stop()
+      const transcript = session.provider === "moss"
+        ? await transcribeMoss(audio, session.apiKey, session.controller.signal)
+        : await transcribeFunAsr(audio, session.apiKey, session.language, session.controller.signal)
+      if (cloudRef.current !== session) return
+      session.apply(transcript)
+      cancel()
+    } catch (error) {
+      if (cloudRef.current !== session) return
+      setError(error instanceof SttServiceError ? error.code : "failed")
+      setErrorDetails(error instanceof SttServiceError ? error.details ?? null : null)
+      cancel()
+    }
+  }, [cancel])
+
+  const start = useCallback((text: string, selectionStart = text.length, selectionEnd = selectionStart) => {
+    if (recognitionRef.current || cloudRef.current) return
+    setError(null)
+    setErrorDetails(null)
+    const before = text.slice(0, selectionStart)
+    const after = text.slice(selectionEnd)
+    const apply = (transcript: string) => {
+      if (!transcript) return
+      const leftSpace = /[a-z0-9]$/i.test(before) && /^[a-z0-9]/i.test(transcript) ? " " : ""
+      const rightSpace = /[a-z0-9]$/i.test(transcript) && /^[a-z0-9]/i.test(after) ? " " : ""
+      onTextRef.current(`${before}${leftSpace}${transcript}${rightSpace}${after}`)
+    }
+    if (provider !== "chrome") {
+      if (!apiKey.trim()) {
+        setError("apiKey")
+        return
+      }
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+        setError("unsupported")
+        return
+      }
+      const session: CloudSession = { provider, controller: new AbortController(), finishing: false, apiKey, language: lang, apply }
+      cloudRef.current = session
+      setPhase("starting")
+      timerRef.current = setTimeout(() => {
+        setError("timeout")
+        cancel()
+      }, 15000)
+      void startAudioRecording(session.controller.signal, () => {
+        if (cloudRef.current !== session) return
+        setError("microphone")
+        cancel()
+      }).then((recording) => {
+        if (cloudRef.current !== session) {
+          recording.cancel()
+          return
+        }
+        session.recording = recording
+        if (timerRef.current) clearTimeout(timerRef.current)
+        setPhase("recording")
+        timerRef.current = setTimeout(() => void finishCloud(), MAX_RECORDING_SECONDS * 1000)
+      }).catch((error: unknown) => {
+        if (cloudRef.current !== session) return
+        const name = error instanceof DOMException ? error.name : ""
+        setError(name === "NotAllowedError" || name === "SecurityError" ? "permission" : "microphone")
+        cancel()
+      })
+      return
+    }
     const Constructor = getRecognitionConstructor()
     if (!Constructor) {
       setError("unsupported")
@@ -80,8 +182,6 @@ export function useDictation(lang: string, onText: (text: string) => void) {
       recognition.lang = lang
       recognition.continuous = true
       recognition.interimResults = true
-      const before = text.slice(0, selectionStart)
-      const after = text.slice(selectionEnd)
       setPhase("starting")
 
       recognition.onstart = () => {
@@ -94,10 +194,7 @@ export function useDictation(lang: string, onText: (text: string) => void) {
         // Rebuild the session text: interim hypotheses replace each other.
         // Keep the original draft/selection untouched until speech is received.
         const transcript = Array.from(event.results, (result) => result[0]?.transcript ?? "").join("")
-        if (!transcript) return
-        const leftSpace = /[a-z0-9]$/i.test(before) && /^[a-z0-9]/i.test(transcript) ? " " : ""
-        const rightSpace = /[a-z0-9]$/i.test(transcript) && /^[a-z0-9]/i.test(after) ? " " : ""
-        onTextRef.current(`${before}${leftSpace}${transcript}${rightSpace}${after}`)
+        apply(transcript)
       }
       recognition.onerror = (event) => {
         const errors: Record<string, DictationError> = {
@@ -121,9 +218,13 @@ export function useDictation(lang: string, onText: (text: string) => void) {
       setError("failed")
       cancel()
     }
-  }, [cancel, lang])
+  }, [apiKey, cancel, finishCloud, lang, provider])
 
   const stop = useCallback(() => {
+    if (cloudRef.current) {
+      void finishCloud()
+      return
+    }
     const recognition = recognitionRef.current
     if (!recognition) return
     stopRequestedRef.current = true
@@ -136,7 +237,7 @@ export function useDictation(lang: string, onText: (text: string) => void) {
     } catch {
       cancel()
     }
-  }, [cancel])
+  }, [cancel, finishCloud])
 
-  return { phase, active: phase !== "idle", error, start, stop, cancel }
+  return { phase, active: phase !== "idle", error, errorDetails, start, stop, cancel }
 }

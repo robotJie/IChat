@@ -22,7 +22,7 @@ import {
   updateSettings
 } from "../lib/storage"
 import { createI18n, I18nProvider, resolveLocale } from "../lib/i18n"
-import type { AppState, IChatSettingsUpdate, ProviderId } from "../lib/types"
+import type { AppState, IChatApiKeys, IChatSettingsUpdate, ProviderId } from "../lib/types"
 import { getVisionBlockedMessage, supportsVisionInput } from "../lib/vision-capabilities"
 import { ProviderConversation } from "./ProviderConversation"
 import { SettingsWorkspace } from "./SettingsWorkspace"
@@ -62,6 +62,7 @@ function didOnlyProviderDraftSettingsChange(current: AppState["settings"], next:
     current.schemaVersion === next.schemaVersion &&
     current.uiLanguage === next.uiLanguage &&
     current.providers.active === next.providers.active &&
+    current.stt.provider === next.stt.provider &&
     JSON.stringify(current.context) === JSON.stringify(next.context) &&
     JSON.stringify(current.shortcuts) === JSON.stringify(next.shortcuts) &&
     JSON.stringify(current.data) === JSON.stringify(next.data) &&
@@ -309,10 +310,11 @@ export function IChatApp({ viewMode }: IChatAppProps) {
     })
   }
 
-  const handleApiKeyChange = async (provider: ProviderId, value: string) => {
+  const handleApiKeyChange = async (provider: keyof IChatApiKeys, value: string) => {
     suppressedStorageEchoRef.current.apiKeys += 1
     try {
-      await updateApiKeys({ [provider]: value })
+      const apiKeys = await updateApiKeys({ [provider]: value })
+      if (provider === "funAsr" || provider === "moss") setAppState((current) => ({ ...current, apiKeys }))
     } catch (error) {
       suppressedStorageEchoRef.current.apiKeys = Math.max(0, suppressedStorageEchoRef.current.apiKeys - 1)
       throw error
@@ -341,7 +343,8 @@ export function IChatApp({ viewMode }: IChatAppProps) {
   }
 
   const handleSettingsChange = async (partial: IChatSettingsUpdate) => {
-    await updateSettings(partial)
+    const settings = await updateSettings(partial)
+    if (partial.stt) setAppState((current) => ({ ...current, settings }))
   }
 
   const handleCopyPrompt = async () => {
@@ -481,12 +484,12 @@ export function IChatApp({ viewMode }: IChatAppProps) {
             onOpenDetachedTab={() => void openDetachedTab()}
             onProviderChange={(provider) => void handleProviderChange(provider)}
             onModelChange={(provider, model) => void handleModelChange(provider, model)}
-            onApiKeyChange={(provider, value) => void handleApiKeyChange(provider, value)}
+            onApiKeyChange={handleApiKeyChange}
             onProviderSearchChange={(provider, enabled) => void handleProviderSearchChange(provider, enabled)}
             onOpenAIEndpointChange={(value) => void handleOpenAIEndpointChange(value)}
             onHistoryMessageLimitChange={(value) => void handleHistoryMessageLimitChange(value)}
             onSystemInstructionsChange={(value) => void handleSystemInstructionsChange(value)}
-            onSettingsChange={(partial) => void handleSettingsChange(partial)}
+            onSettingsChange={handleSettingsChange}
             onCopyPrompt={() => void handleCopyPrompt()}
             onSendCurrentContext={() => void handleSendCurrentContext()}
             onClearThread={() => void handleClearThread()}
