@@ -283,6 +283,7 @@ function clampHistoryMessageLimit(value: unknown): number {
 
 export function normalizeSettings(value: unknown): IChatSettings {
   const settings = isRecord(value) ? value : {}
+  const stt = isRecord(settings.stt) ? settings.stt : {}
   const providers = isRecord(settings.providers) ? settings.providers : {}
   const nestedModels = isRecord(providers.models) ? providers.models : {}
   const nestedSearchEnabled = isRecord(providers.searchEnabled) ? providers.searchEnabled : {}
@@ -327,8 +328,9 @@ export function normalizeSettings(value: unknown): IChatSettings {
     : getDefaultFlowContextSystemInstructionsForSettings({ uiLanguage })
 
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     uiLanguage,
+    stt: { provider: stt.provider === "fun-asr" || stt.provider === "moss" ? stt.provider : "chrome" },
     providers: {
       active: activeProvider,
       models: {
@@ -369,7 +371,9 @@ export function normalizeApiKeys(value: unknown): IChatApiKeys {
   return {
     openai: typeof apiKeys.openai === "string" ? apiKeys.openai : "",
     gemini: typeof apiKeys.gemini === "string" ? apiKeys.gemini : "",
-    anthropic: typeof apiKeys.anthropic === "string" ? apiKeys.anthropic : ""
+    anthropic: typeof apiKeys.anthropic === "string" ? apiKeys.anthropic : "",
+    funAsr: typeof apiKeys.funAsr === "string" ? apiKeys.funAsr.trim() : "",
+    moss: typeof apiKeys.moss === "string" ? apiKeys.moss.trim() : ""
   }
 }
 
@@ -516,8 +520,9 @@ function shouldPatch(original: unknown, normalized: unknown) {
 function mergeSettings(current: IChatSettings, partial: IChatSettingsUpdate): IChatSettings {
   return normalizeSettings({
     ...current,
-    schemaVersion: 5,
+    schemaVersion: 6,
     uiLanguage: partial.uiLanguage ?? current.uiLanguage,
+    stt: { ...current.stt, ...partial.stt },
     providers: {
       ...current.providers,
       ...(partial.providers ?? {}),

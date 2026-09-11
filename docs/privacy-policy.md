@@ -4,7 +4,7 @@ title: Privacy Policy
 
 # IChat Privacy Policy
 
-Last updated: September 10, 2026
+Last updated: September 11, 2026
 
 This Privacy Policy explains how IChat handles information when you use the extension.
 
@@ -33,6 +33,7 @@ Stored locally in extension storage:
 - OpenAI-compatible API key
 - Gemini API key
 - Anthropic API key
+- optional Alibaba Cloud Fun-ASR and MOSS API keys and selected speech recognition provider
 - selected provider and model settings
 - optional custom OpenAI-compatible endpoint
 
@@ -71,13 +72,17 @@ Stored locally:
 
 ### 5. Optional Voice Dictation
 
-Clicking the microphone in the composer starts browser speech recognition after microphone access is allowed. Recognition may send microphone audio to the browser's speech service provider (for example, Google's service in Chrome), independently of your selected chat provider. Network access and service availability may be required; offline recognition is not guaranteed.
+With MOSS selected, the same in-memory recording flow sends a 16 kHz mono WAV directly to `https://api.mosi.cn/v1/audio/transcriptions` as a multipart file, using model `moss-transcribe-1.0`. Only the recording and transcription options are sent, without page context or chat history. The MOSS key stays in local extension storage and is sent only to MOSS for authentication. Recording limits, cancellation, and local cleanup match the Fun-ASR flow below. IChat does not create a separate hosted file through the MOSS files API.
 
-IChat does not record or store audio. Recognized text is inserted into the unsent draft. When you send it, the text follows the same provider request and local chat storage flow as typed messages. Stopping dictation, leaving the chat view, or closing the page stops recognition. Listening never restarts automatically.
+Clicking the microphone starts the selected speech input flow after microphone access is allowed. Chrome built-in recognition is the default and may send audio to the browser's speech service (for example, Google's service in Chrome). Alternatively, you can choose Alibaba Cloud Fun-ASR-Flash or MOSS and supply its separate API key locally in Settings → STT Provider.
 
-If the side panel cannot obtain microphone permission, an optional extension tab lets you grant access. It briefly opens the microphone and immediately stops all audio tracks without recording or sending audio to a chat provider. No additional manifest or host permissions are added for dictation. You can revoke microphone access in Chrome or system settings.
+With Fun-ASR-Flash, IChat records up to three minutes of microphone audio into memory. Clicking the microphone again, pressing Escape in the input, or reaching the recording limit stops recording and submits the audio as a 16 kHz mono WAV to Alibaba Cloud's Beijing DashScope HTTPS endpoint for transcription. The request contains this recording and a language hint, not page context or chat history. Recordings are not saved to extension storage or IndexedDB and are released after processing or cancellation. Transcription can be cancelled; cancellation cannot undo audio already transmitted. Leaving the chat, hiding the document, switching providers, or closing the page cancels capture and outstanding requests. Listening never restarts automatically.
 
-The browser's speech service handles audio under its own terms, privacy policy, and retention rules.
+Recognized text is inserted into the unsent draft. Sending the draft follows the same chat provider request and local chat storage flow as typed messages. Speech and chat providers are configured independently; this implementation uses no project-owned relay.
+
+If the side panel cannot obtain microphone permission, an optional extension tab lets you grant access. The permission button briefly opens the microphone and immediately stops all audio tracks. A separate, user-triggered microphone test measures sound levels locally for up to ten seconds and displays the input device name. The test does not record, persist, or upload audio or device information; stopping it or leaving the tab releases the microphone. No additional manifest or host permissions are added for dictation. You can revoke microphone access in Chrome or system settings.
+
+The browser's speech service, Alibaba Cloud, or MOSS handles audio under its own terms, privacy policy, and retention rules. All modes depend on their respective service availability; offline recognition is not guaranteed.
 
 ## When Data Is Collected
 

@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai"
 
 export type ProviderId = "openai" | "gemini" | "anthropic"
+export type SttProviderId = "chrome" | "fun-asr" | "moss"
 export type UiLanguage = "system" | "en" | "zh-CN"
 export type CaptureMode = "selection" | "smart-dom"
 export type CaptureStatusState = "idle" | "capturing" | "captured" | "error"
@@ -153,8 +154,11 @@ export interface FlowContext {
 }
 
 export interface IChatSettings {
-  schemaVersion: 5
+  schemaVersion: 6
   uiLanguage: UiLanguage
+  stt: {
+    provider: SttProviderId
+  }
   providers: {
     active: ProviderId
     models: Record<ProviderId, string>
@@ -179,6 +183,7 @@ export interface IChatSettings {
 
 export interface IChatSettingsUpdate {
   uiLanguage?: UiLanguage
+  stt?: Partial<IChatSettings["stt"]>
   providers?: {
     active?: ProviderId
     models?: Partial<Record<ProviderId, string>>
@@ -194,6 +199,8 @@ export interface IChatApiKeys {
   openai: string
   gemini: string
   anthropic: string
+  funAsr: string
+  moss: string
 }
 
 export interface CaptureStatus {

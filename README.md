@@ -11,7 +11,7 @@ It helps you capture context from the current web page and send it to your selec
 - turn that context into a structured `FlowContext`
 - open a native side panel chat for follow-up questions
 - support BYOK setup for OpenAI-compatible providers, Gemini, and Anthropic
-- dictate into the draft using the microphone in the integrated composer; browser speech recognition may send audio to its service provider ([details](docs/extension-guide.md#voice-input-and-composer))
+- dictate into the draft with Chrome built-in recognition, BYOK Alibaba Cloud Fun-ASR-Flash, or MOSS; the selected speech service processes the audio ([setup and data flow](docs/extension-guide.md#voice-input-and-composer))
 
 <img src="docs/assets/sample.png" alt="" width="600" />
 

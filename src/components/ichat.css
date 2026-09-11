@@ -1611,6 +1611,44 @@ a:focus-visible {
   line-height: 1.6;
 }
 
+.ichat-stt-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  cursor: pointer;
+}
+
+.ichat-stt-option input {
+  margin-top: 4px;
+  accent-color: var(--ichat-accent);
+}
+
+.ichat-stt-option span {
+  min-width: 0;
+}
+
+.ichat-stt-option small {
+  display: block;
+  margin-top: 6px;
+  color: var(--ichat-muted);
+  line-height: 1.6;
+}
+
+.ichat-stt-config {
+  display: grid;
+  gap: 14px;
+}
+
+.ichat-stt-config p,
+.ichat-stt-config [role="status"] {
+  margin: 0;
+  color: var(--ichat-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
 .ichat-modal-overlay {
   position: fixed;
   inset: 0;

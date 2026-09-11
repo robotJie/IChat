@@ -107,11 +107,19 @@ Open **Settings** and add one of the following:
 
 The composer combines the text area and its controls in one panel. The arrow sends the draft; during generation it becomes a square that stops the response. Enter sends, Shift+Enter adds a line break, and confirming text with an input method does not send.
 
-Click the microphone to dictate in the interface language (English or Simplified Chinese). Text appears at the cursor, or replaces the selected text, while preserving the rest of the draft. While listening, editing and sending are paused. Click the microphone again (or press Escape in the input) to finish, then edit and send. Dictation never sends the draft automatically.
+Choose a speech provider in **Settings → STT Provider**, independently of the chat model:
+
+- **Chrome built-in (default):** no key required; words appear as you speak through the browser's speech service.
+- **MOSS:** select MOSS and save an API key from `platform.mosi.cn`. Uses `moss-transcribe-1.0` with `POST https://api.mosi.cn/v1/audio/transcriptions`, sending the WAV as a multipart `file` and reading the JSON `text` response. Like Fun-ASR, it records up to three minutes and transcribes after stopping, with a 45-second transcription timeout and cancellation support. MOSS and Fun-ASR keys are saved independently. [MOSS API documentation](https://platform.mosi.cn/docs/reference/transcriptions/).
+- **Fun-ASR-Flash:** enter a Beijing-region Bailian API key, enable access to `fun-asr-flash-2026-06-15`, and click **Save API Key**. Click the microphone to record, then click it again (or press Escape in the input) to submit for transcription. This is a non-real-time HTTP model; text appears after recording finishes. At three minutes, recording stops and submits automatically. During transcription, the microphone becomes a cancel button. Startup times out after 15 seconds; transcription times out after 45 seconds.
+
+Chrome and Fun-ASR follow the interface language (English or Simplified Chinese); MOSS detects the spoken language automatically. Text is inserted at the cursor or replaces the selected text, preserving the rest of the draft. Editing and sending are paused during capture/transcription. Dictation never sends the draft to the chat model automatically. Existing installs keep Chrome as the default; changing the speech provider preserves chat settings and keys.
 
 If microphone access is denied or the side panel cannot display a permission prompt, click **Allow microphone** in the error message. Grant access in the extension tab, return to the chat, and click the microphone again. Unsupported browsers, device failures, and unavailable speech services show an error while keeping the draft available for typing.
 
-Dictation uses browser speech recognition, which may send audio to the browser's service provider and require a working network connection. It does not use your chat model API key. IChat does not store audio. Closing or leaving the chat stops recognition; listening never restarts automatically. You can revoke microphone access in Chrome or system settings.
+Microphone permission belongs to IChat's extension origin, not each website beside the side panel. If no speech is recognized, click **Test microphone** in the error message. The extension tab can run a local test for up to ten seconds, showing the default input device and a sound level meter. It does not record or upload audio. A moving meter confirms input signal, not necessarily intelligible speech. If it stays still, check the default microphone at `chrome://settings/content/microphone`, the device mute switch, and the Windows input volume. Stopping the test or leaving the tab releases the microphone.
+
+The selected speech provider processes audio independently of the chat model: the browser's speech service for Chrome, Alibaba Cloud for Fun-ASR-Flash, or MOSS for MOSS transcription. Fun-ASR and MOSS recordings stay only in memory until processing ends or is cancelled; they are sent directly as WAV audio over HTTPS. IChat does not persist recordings. Closing or leaving the chat stops capture and cancels transcription; listening never restarts automatically. You can revoke microphone access in Chrome or system settings. To remove a speech provider key, select that provider and clear its field and click **Save API Key**.
 
 ## Local Storage And Data Flow
 
@@ -121,7 +129,7 @@ In the current implementation:
 - FlowContext and chat snapshots are stored locally
 - image attachments are stored in IndexedDB
 - requests are sent directly to the selected provider
-- optional voice dictation may send audio to the browser's speech service; recognized draft text is sent to the chat provider only when you send it
+- optional voice dictation sends audio to the selected speech service; recognized draft text is sent to the chat provider only when you send it
 
 For more detail, see the [Privacy Policy](./privacy-policy.md).
 
