@@ -58,6 +58,7 @@ async function main() {
       }
       window.SpeechRecognition = undefined
       window.providerCalls = 0
+      window.providerBodies = []
       window.sttRequests = []
       window.sttResponse = "ok"
       window.mossRequests = []
@@ -78,6 +79,7 @@ async function main() {
           return Promise.resolve(new Response(JSON.stringify({ output: { text: "语音识别成功。" } }), { headers: { "content-type": "application/json" } }))
         }
         window.providerCalls++
+        window.providerBodies.push(JSON.parse(options.body))
         return new Promise((_resolve, reject) => options.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError"))))
       }
       window.microphoneTracksStopped = 0
@@ -118,7 +120,7 @@ async function main() {
     await input.evaluate((el) => el.setSelectionRange(2, 2))
     await mic.evaluate((el) => el.click())
     assert(await input.getAttribute("readonly") !== null)
-    assert(await send.isDisabled(), "cannot send partial dictation")
+    assert(await send.isDisabled(), "wait for microphone startup before sending")
     await page.evaluate(() => window.speechSessions.at(-1).onstart())
     assert.equal(await page.evaluate(() => window.speechSessions.at(-1).lang), "zh-CN")
     const result = async (...text) => page.evaluate((parts) => window.speechSessions.at(-1).onresult({ results: parts.map((transcript) => [{ transcript }]) }), text)
@@ -272,7 +274,7 @@ async function main() {
     await mic.evaluate((el) => el.click())
     await page.getByText("正在录音……", { exact: false }).waitFor()
     assert.equal(await page.evaluate(() => window.sttRequests.length), 0, "recording is uploaded only after stopping")
-    assert(await send.isDisabled())
+    assert(await send.isEnabled(), "recording can be stopped and sent directly")
     await page.waitForTimeout(450)
     await page.getByRole("button", { name: "停止听写" }).evaluate((el) => el.click())
     await page.waitForFunction(() => document.querySelector("textarea.ichat-composer-input").value.includes("语音识别成功。"))
@@ -410,6 +412,87 @@ async function main() {
     await mic.evaluate((el) => el.click())
     assert.equal(await page.evaluate(() => window.speechSessions.length), 1, "switching back uses Chrome recognition")
     await page.evaluate(() => window.dispatchEvent(new Event("pagehide")))
+    // Send during dictation must wait for completion, preserve selection, and send once.
+    const resetSpeechProvider = async (provider) => {
+      await page.evaluate((provider) => {
+        const values = JSON.parse(localStorage.getItem("test-storage"))
+        const settings = JSON.parse(values["ichat.settings"])
+        settings.stt.provider = provider
+        values["ichat.settings"] = JSON.stringify(settings)
+        const keys = JSON.parse(values["ichat.apiKeys"])
+        keys.moss = "test-moss-key"
+        values["ichat.apiKeys"] = JSON.stringify(keys)
+        localStorage.setItem("test-storage", JSON.stringify(values))
+      }, provider)
+      await page.reload()
+      await input.waitFor()
+      await page.evaluate(() => { window.useSyntheticAudio = true })
+    }
+    const stopChat = async () => {
+      await page.getByRole("button", { name: "停止", exact: true }).evaluate((el) => el.click())
+      await send.waitFor()
+    }
+    await resetSpeechProvider("chrome")
+    await fill("前旧后")
+    await input.evaluate((el) => el.setSelectionRange(1, 2))
+    await mic.evaluate((el) => el.click())
+    await page.evaluate(() => window.speechSessions.at(-1).onstart())
+    assert(await send.isEnabled())
+    await result("临时")
+    await send.evaluate((el) => { el.click(); el.click() })
+    assert.equal(await page.evaluate(() => window.providerCalls), 0, "Chrome must finish before the chat request")
+    await result("最终")
+    await page.evaluate(() => window.speechSessions.at(-1).onend())
+    await page.waitForFunction(() => window.providerCalls === 1)
+    assert(await page.evaluate(() => JSON.stringify(window.providerBodies[0]).includes("前最终后")), "send the final merged text, not the stale React draft")
+    await stopChat()
+    await fill("无语音时保留")
+    await mic.evaluate((el) => el.click())
+    await page.evaluate(() => window.speechSessions.at(-1).onstart())
+    await send.evaluate((el) => el.click())
+    await page.evaluate(() => window.speechSessions.at(-1).onend())
+    await page.getByText("未检测到语音", { exact: false }).waitFor()
+    assert.equal(await input.inputValue(), "无语音时保留")
+    assert.equal(await page.evaluate(() => window.providerCalls), 1)
+    await mic.evaluate((el) => el.click())
+    await page.evaluate(() => window.speechSessions.at(-1).onstart())
+    await result("未完成")
+    await send.evaluate((el) => el.click())
+    await page.getByText("语音输入超时", { exact: false }).waitFor()
+    assert.equal(await page.evaluate(() => window.providerCalls), 1, "timeout must not send interim text")
+    for (const provider of ["fun-asr", "moss"]) {
+      await resetSpeechProvider(provider)
+      await fill("前旧后")
+      await input.evaluate((el) => el.setSelectionRange(1, 2))
+      const recordAndSend = async () => {
+        await mic.evaluate((el) => el.click())
+        await page.getByText("正在录音……", { exact: false }).waitFor()
+        assert(await send.isEnabled())
+        await page.waitForTimeout(350)
+        await send.evaluate((el) => { el.click(); el.click() })
+      }
+      await recordAndSend()
+      await page.waitForFunction(() => window.providerCalls === 1)
+      const expected = provider === "moss" ? "前MOSS 识别成功。后" : "前语音识别成功。后"
+      assert(await page.evaluate((expected) => JSON.stringify(window.providerBodies[0]).includes(expected), expected))
+      assert.equal(await page.evaluate(() => window.sttRequests.length + window.mossRequests.length), 1, "double click must not duplicate transcription")
+      await stopChat()
+      await fill("失败不发送")
+      await page.evaluate(() => { window.sttResponse = "unauthorized"; window.mossResponse = "quota" })
+      await recordAndSend()
+      await page.locator(".ichat-dictation-error").waitFor()
+      assert.equal(await input.inputValue(), "失败不发送")
+      assert.equal(await page.evaluate(() => window.providerCalls), 1)
+      await page.evaluate(() => { window.sttResponse = window.mossResponse = "hold" })
+      await recordAndSend()
+      await page.waitForFunction(() => typeof window.resolveStt === "function" || typeof window.resolveMoss === "function")
+      await page.getByRole("button", { name: "取消转写" }).evaluate((el) => el.click())
+      await fill("取消后修改")
+      await page.evaluate(() => (window.resolveMoss || window.resolveStt)(new Response(JSON.stringify({ text: "过期", output: { text: "过期" } }))))
+      await page.waitForTimeout(100)
+      assert.equal(await input.inputValue(), "取消后修改")
+      assert.equal(await page.evaluate(() => window.providerCalls), 1, "cancelled transcription must never trigger queued send")
+    }
     assert.deepEqual(errors, [], "no browser runtime errors")
     console.log("PASS: production composer, dictation lifecycle, permission page, IME, stop/send, and 320/390/960px layout. Speech and provider APIs were mocked.")
   } finally {

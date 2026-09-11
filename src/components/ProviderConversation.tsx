@@ -1651,40 +1651,49 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
     }
   }, [])
 
+  const submitInFlightRef = useRef(false)
   const handleComposerSubmit = useCallback(async () => {
-    if (isBusyRef.current || dictation.active || visionBlocked) return
-    const value = composerText.trim()
-    const hasComposerImages = composerAttachments.length > 0
-    if (!value && !attachmentPrompt && !hasComposerImages) {
-      return
-    }
-
-    let contextDraft = attachmentPrompt && attachmentFlowContext ? attachmentPrompt : null
-
-    if (contextDraft && attachmentFlowContext) {
-      const nextFlowContext = editorState ? applyEditorState(attachmentFlowContext, editorState) : attachmentFlowContext
-      await updateFlowContextDraft(nextFlowContext)
-      contextDraft = {
-        ...contextDraft,
-        attachmentIds: nextFlowContext.attachments.filter((attachment) => attachment.kind === "image" && attachment.blobStoreKey).map((attachment) => attachment.id),
-        requiresVision: nextFlowContext.attachments.some((attachment) => attachment.kind === "image" && attachment.blobStoreKey),
-        prompt: composeFlowPrompt(nextFlowContext)
+    if (isBusyRef.current || submitInFlightRef.current || visionBlocked) return
+    if (dictation.active && dictation.phase !== "recording" && dictation.phase !== "listening") return
+    submitInFlightRef.current = true
+    try {
+      const draft = dictation.active ? await dictation.stopAndGetText() : composerText
+      if (draft === null || isBusyRef.current) return
+      const value = draft.trim()
+      const hasComposerImages = composerAttachments.length > 0
+      if (!value && !attachmentPrompt && !hasComposerImages) {
+        return
       }
-      setDraftContextOpen(false)
-    }
 
-    const requestText = buildContextAwarePrompt(contextDraft, value)
-    const fileParts = buildFilePartsForAttachments([...contextImageAttachments, ...composerAttachments])
+      let contextDraft = attachmentPrompt && attachmentFlowContext ? attachmentPrompt : null
 
-    if (!currentKey) {
+      if (contextDraft && attachmentFlowContext) {
+        const nextFlowContext = editorState ? applyEditorState(attachmentFlowContext, editorState) : attachmentFlowContext
+        await updateFlowContextDraft(nextFlowContext)
+        contextDraft = {
+          ...contextDraft,
+          attachmentIds: nextFlowContext.attachments.filter((attachment) => attachment.kind === "image" && attachment.blobStoreKey).map((attachment) => attachment.id),
+          requiresVision: nextFlowContext.attachments.some((attachment) => attachment.kind === "image" && attachment.blobStoreKey),
+          prompt: composeFlowPrompt(nextFlowContext)
+        }
+        setDraftContextOpen(false)
+      }
+
+      const requestText = buildContextAwarePrompt(contextDraft, value)
+      const fileParts = buildFilePartsForAttachments([...contextImageAttachments, ...composerAttachments])
+
+      if (!currentKey) {
+        await runSendPipeline(value || requestText, "manual", contextDraft, requestText, fileParts)
+        return
+      }
+
+      setComposerText("")
+      setComposerAttachments([])
       await runSendPipeline(value || requestText, "manual", contextDraft, requestText, fileParts)
-      return
+    } finally {
+      submitInFlightRef.current = false
     }
-
-    setComposerText("")
-    setComposerAttachments([])
-    await runSendPipeline(value || requestText, "manual", contextDraft, requestText, fileParts)
-  }, [attachmentFlowContext, attachmentPrompt, buildFilePartsForAttachments, composerAttachments, composerText, contextImageAttachments, currentKey, dictation.active, editorState, runSendPipeline, visionBlocked])
+  }, [attachmentFlowContext, attachmentPrompt, buildFilePartsForAttachments, composerAttachments, composerText, contextImageAttachments, currentKey, dictation.active, dictation.phase, dictation.stopAndGetText, editorState, runSendPipeline, visionBlocked])
 
   const handleStop = useCallback(() => {
     abortControllerRef.current?.abort()
@@ -1701,7 +1710,8 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
 
   const missingKey = !currentKey
   const modalReadOnly = isBusy || attachmentPrompt?.status === "processing"
-  const canSubmit = !isBusy && !dictation.active && !visionBlocked && (Boolean(composerText.trim()) || Boolean(attachmentPrompt) || composerAttachments.length > 0)
+  const canFinishAndSend = dictation.phase === "recording" || dictation.phase === "listening"
+  const canSubmit = !isBusy && !visionBlocked && (canFinishAndSend || (!dictation.active && (Boolean(composerText.trim()) || Boolean(attachmentPrompt) || composerAttachments.length > 0)))
   const sendLabel = isBusy ? t("chat.composer.stop") : allActiveAttachments.length > 0 ? t("chat.composer.sendWithImages") : attachmentPrompt ? t("chat.composer.sendWithContext") : t("chat.composer.send")
   const dictationLabel = dictation.phase === "transcribing" ? t("chat.dictation.cancel") : dictation.active ? t("chat.dictation.stop") : t("chat.dictation.start")
   const activeBanner = visionBlocked ? visionBlockedMessage : errorBanner
@@ -1891,7 +1901,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
             className="ichat-composer-button is-send"
             type="button"
             aria-label={sendLabel}
-            title={sendLabel}
+            title={canFinishAndSend ? t("chat.dictation.send") : sendLabel}
             onClick={isBusy ? handleStop : () => void handleComposerSubmit()}
             disabled={!isBusy && !canSubmit}>
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">

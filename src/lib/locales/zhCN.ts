@@ -18,6 +18,7 @@ export const zhCNCatalog = {
   "settings.stt.mossApiKey": "MOSS API Key",
   "settings.stt.mossKeyNote": "请使用 platform.mosi.cn 平台的 API Key，并确保有转写权限。Key 仅存储在本地；WAV 录音直接发送至 MOSS，IChat 不保存录音。MOSS 自动识别所说语言。",
   "chat.dictation.mossService": "MOSS · 录音结束后转写",
+  "chat.dictation.send": "停止听写，完成转写后发送",
   "settings.stt.funAsrNote": "录音后再次点击麦克风，交由阿里云转写。每次最长 3 分钟，识别完成后填入文字。",
   "settings.stt.model": "模型：{model} · 北京地域",
   "settings.stt.apiKey": "Fun-ASR API Key",

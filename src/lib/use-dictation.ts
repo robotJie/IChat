@@ -29,7 +29,7 @@ interface CloudSession {
   finishing: boolean
   apiKey: string
   language: string
-  apply: (text: string) => void
+  apply: (text: string) => string
 }
 
 function getRecognitionConstructor() {
@@ -49,9 +49,13 @@ export function useDictation(lang: string, onText: (text: string) => void, provi
   const stopRequestedRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onTextRef = useRef(onText)
+  const completedTextRef = useRef<string | null>(null)
+  const completionRef = useRef<((text: string | null) => void) | null>(null)
   onTextRef.current = onText
 
   const release = useCallback(() => {
+    completionRef.current?.(null)
+    completionRef.current = null
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = null
     const cloud = cloudRef.current
@@ -70,6 +74,13 @@ export function useDictation(lang: string, onText: (text: string) => void, provi
     release()
     setPhase("idle")
   }, [release])
+
+  const complete = useCallback((text: string | null) => {
+    const resolve = completionRef.current
+    completionRef.current = null
+    cancel()
+    resolve?.(text)
+  }, [cancel])
 
   useEffect(() => {
     const onVisibilityChange = () => {
@@ -110,27 +121,29 @@ export function useDictation(lang: string, onText: (text: string) => void, provi
         ? await transcribeMoss(audio, session.apiKey, session.controller.signal)
         : await transcribeFunAsr(audio, session.apiKey, session.language, session.controller.signal)
       if (cloudRef.current !== session) return
-      session.apply(transcript)
-      cancel()
+      complete(session.apply(transcript))
     } catch (error) {
       if (cloudRef.current !== session) return
       setError(error instanceof SttServiceError ? error.code : "failed")
       setErrorDetails(error instanceof SttServiceError ? error.details ?? null : null)
       cancel()
     }
-  }, [cancel])
+  }, [cancel, complete])
 
   const start = useCallback((text: string, selectionStart = text.length, selectionEnd = selectionStart) => {
     if (recognitionRef.current || cloudRef.current) return
     setError(null)
     setErrorDetails(null)
+    completedTextRef.current = null
     const before = text.slice(0, selectionStart)
     const after = text.slice(selectionEnd)
     const apply = (transcript: string) => {
-      if (!transcript) return
+      if (!transcript) return text
       const leftSpace = /[a-z0-9]$/i.test(before) && /^[a-z0-9]/i.test(transcript) ? " " : ""
       const rightSpace = /[a-z0-9]$/i.test(transcript) && /^[a-z0-9]/i.test(after) ? " " : ""
-      onTextRef.current(`${before}${leftSpace}${transcript}${rightSpace}${after}`)
+      const merged = `${before}${leftSpace}${transcript}${rightSpace}${after}`
+      onTextRef.current(merged)
+      return merged
     }
     if (provider !== "chrome") {
       if (!apiKey.trim()) {
@@ -194,7 +207,7 @@ export function useDictation(lang: string, onText: (text: string) => void, provi
         // Rebuild the session text: interim hypotheses replace each other.
         // Keep the original draft/selection untouched until speech is received.
         const transcript = Array.from(event.results, (result) => result[0]?.transcript ?? "").join("")
-        apply(transcript)
+        completedTextRef.current = transcript.trim() ? apply(transcript) : null
       }
       recognition.onerror = (event) => {
         const errors: Record<string, DictationError> = {
@@ -207,7 +220,10 @@ export function useDictation(lang: string, onText: (text: string) => void, provi
         if (event.error !== "aborted") setError(errors[event.error] ?? "failed")
         cancel()
       }
-      recognition.onend = cancel
+      recognition.onend = () => {
+        if (completionRef.current && completedTextRef.current === null) setError("noSpeech")
+        complete(completedTextRef.current)
+      }
       // A dismissed permission prompt or stalled service must not lock the draft.
       timerRef.current = setTimeout(() => {
         setError("failed")
@@ -218,7 +234,7 @@ export function useDictation(lang: string, onText: (text: string) => void, provi
       setError("failed")
       cancel()
     }
-  }, [apiKey, cancel, finishCloud, lang, provider])
+  }, [apiKey, cancel, complete, finishCloud, lang, provider])
 
   const stop = useCallback(() => {
     if (cloudRef.current) {
@@ -226,12 +242,15 @@ export function useDictation(lang: string, onText: (text: string) => void, provi
       return
     }
     const recognition = recognitionRef.current
-    if (!recognition) return
+    if (!recognition || stopRequestedRef.current) return
     stopRequestedRef.current = true
     setPhase("stopping")
     if (timerRef.current) clearTimeout(timerRef.current)
     // Allow the final result to arrive before making the draft editable/sendable.
-    timerRef.current = setTimeout(cancel, 2000)
+    timerRef.current = setTimeout(() => {
+      if (completionRef.current) setError("timeout")
+      cancel()
+    }, 2000)
     try {
       recognition.stop()
     } catch {
@@ -239,5 +258,13 @@ export function useDictation(lang: string, onText: (text: string) => void, provi
     }
   }, [cancel, finishCloud])
 
-  return { phase, active: phase !== "idle", error, errorDetails, start, stop, cancel }
+  const stopAndGetText = useCallback((): Promise<string | null> => {
+    if (completionRef.current || (!cloudRef.current?.recording && !recognitionRef.current)) return Promise.resolve(null)
+    return new Promise((resolve) => {
+      completionRef.current = resolve
+      stop()
+    })
+  }, [stop])
+
+  return { phase, active: phase !== "idle", error, errorDetails, start, stop, stopAndGetText, cancel }
 }

@@ -16,6 +16,7 @@ export const enCatalog = {
   "settings.stt.mossApiKey": "MOSS API Key",
   "settings.stt.mossKeyNote": "Use a key from platform.mosi.cn with transcription access. The key is stored locally; recorded WAV audio is sent directly to MOSS and is not saved by IChat. MOSS detects the spoken language automatically.",
   "chat.dictation.mossService": "MOSS · Record, then transcribe",
+  "chat.dictation.send": "Stop dictation, finish transcription, and send",
   "settings.stt.funAsrNote": "Record, then click the microphone again to transcribe with Alibaba Cloud. Up to 3 minutes per recording; text appears after transcription.",
   "settings.stt.model": "Model: {model} · Beijing",
   "settings.stt.apiKey": "Fun-ASR API Key",
