@@ -97,8 +97,8 @@ export const zhCNCatalog = {
   "settings.context.description": "检查最新的 FlowContext，查看生成的提示，并管理当前捕获的上下文。",
   "settings.context.autoSend.label": "自动发送捕获上下文",
   "settings.context.autoSend.description": "开启后，新的 FlowContext 会立刻变成待发送提示，而不是先作为输入框附件等待。",
-  "settings.context.autoSend.on": "开启",
-  "settings.context.autoSend.off": "关闭",
+  "settings.context.autoSend.on": "已开启",
+  "settings.context.autoSend.off": "已关闭",
   "settings.context.previewDensity.label": "FlowContext 预览密度",
   "settings.context.previewDensity.description": "紧凑模式会让摘要卡片更短；完整模式会显示更长的摘录。",
   "settings.context.previewDensity.compact": "紧凑",
@@ -285,8 +285,8 @@ zhCNCatalog["settings.providers.openai.note"] = "\u9002\u5408\u4f5c\u4e3a\u517c\
 zhCNCatalog["settings.providers.openai.endpointNote"] = "\u53ef\u9009\u3002\u7559\u7a7a\u8868\u793a\u5b98\u65b9 OpenAI\u3002\u82e5\u4f7f\u7528\u517c\u5bb9\u63d0\u4f9b\u5546\uff0c\u8bf7\u586b\u5199\u5b8c\u6574\u7684 base URL\uff0c\u901a\u5e38\u4ee5 /v1 \u7ed3\u5c3e\u3002"
 zhCNCatalog["settings.providers.search.label"] = "\u542f\u7528\u641c\u7d22"
 zhCNCatalog["settings.providers.search.description"] = "\u5141\u8bb8\u8be5\u63d0\u4f9b\u5546\u5728\u5f53\u524d\u6a21\u578b\u548c endpoint \u652f\u6301\u65f6\u4f7f\u7528\u5185\u5efa\u8054\u7f51\u641c\u7d22\u3002"
-zhCNCatalog["settings.providers.search.on"] = "\u5f00\u542f"
-zhCNCatalog["settings.providers.search.off"] = "\u5173\u95ed"
+zhCNCatalog["settings.providers.search.on"] = "\u5df2\u5f00\u542f"
+zhCNCatalog["settings.providers.search.off"] = "\u5df2\u5173\u95ed"
 zhCNCatalog["capture.smart.title"] = "IChat \u667a\u80fd\u6355\u83b7"
 zhCNCatalog["capture.smart.subtitle"] = "\u6eda\u8f6e\u5207\u6362\u8303\u56f4 | \u5de6\u952e\u786e\u8ba4 | Esc \u53d6\u6d88"
 zhCNCatalog["capture.flash.title"] = "IChat \u5df2\u6355\u83b7"

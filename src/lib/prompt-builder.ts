@@ -24,7 +24,7 @@ export const DEFAULT_SETTINGS: IChatSettings = {
     openaiEndpoint: ""
   },
   context: {
-    autoSend: true,
+    autoSend: false,
     previewDensity: "compact",
     showLocator: true,
     showImplicitContext: true,

@@ -4,7 +4,7 @@ title: Privacy Policy
 
 # IChat Privacy Policy
 
-Last updated: September 11, 2026
+Last updated: September 27, 2026
 
 This Privacy Policy explains how IChat handles information when you use the extension.
 
@@ -38,6 +38,8 @@ Stored locally in extension storage:
 - optional custom OpenAI-compatible endpoint
 
 ### 2. Captured Page Context
+
+Auto-send is off by default for new installs or when no value is saved. Captured context waits for you to send it manually unless you enable auto-send. Existing saved preferences are preserved.
 
 When you explicitly trigger capture, IChat may collect:
 

@@ -97,7 +97,7 @@ Open **Settings** and add one of the following:
 
 ![](./assets/FlowContext.png)
 
-- **Auto-send**
+- **Auto-send** (off by default for new installs or when no value is saved; existing saved preferences are preserved)
   - When auto-send is on, captured context enters the send pipeline immediately without requiring a manual send step.
   - When auto-send is off, you can type your own prompt first and then send it together with the captured context.
 - **FlowContext system instructions** act as the system prompt and can be customized.

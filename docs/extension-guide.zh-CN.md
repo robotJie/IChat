@@ -95,7 +95,7 @@ IChat 是一个面向网页场景的 Chrome 侧边栏 AI 对话扩展。创新�
 #### FlowContext
 ![](./assets/FlowContext.png)
 
-- auto-send 行为
+- **自动发送**（新安装或未保存此设置时默认关闭；已有设置会保留）
 	- 开启 auto-send，让抓取到的上下文立即进入发送流程(无须手动发送)
 	- 关闭 auto-send，可在输入框输入想要的prompt再发送
 

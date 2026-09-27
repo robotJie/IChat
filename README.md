@@ -44,7 +44,7 @@ Speech audio is processed by the selected speech service. MOSS and Fun-ASR recor
 2. In `Settings`, add your API key and choose a provider
 3. Open an `http` or `https` page, or an online PDF in Chrome's native PDF viewer
 4. Trigger capture from the extension action or `Ctrl+Shift+Y` (default shortcut), or select text and right-click **Capture selected text with IChat**. For online PDFs, the action/shortcut captures the visible area as an image; the right-click menu captures selected text.
-5. With **Auto-send** off, review the captured context and add your question before sending. With it on, capture starts the send flow immediately.
+5. **Auto-send** defaults to off for new installs or when no value is saved; existing saved preferences are preserved. With it off, review the captured context and add your question before sending. With it on, capture starts the send flow immediately.
 6. Optionally choose a speech provider in **Settings → STT Provider** and click the microphone to dictate. Click Send during recording to transcribe and send, or click the microphone again to keep the result as a draft.
 7. Use the chat toolbar search or `Ctrl+F` / `Cmd+F` to find text in the current conversation.
 
