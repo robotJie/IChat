@@ -34,6 +34,10 @@ On ordinary web pages, the shortcut supports two capture paths:
 - detached chat tab
 - BYOK support for OpenAI-compatible providers, Gemini, and Anthropic
 
+### SVG Images
+
+SVG image attachments are converted locally to PNG before sending to the selected vision-capable model. This also supports SVG diagrams containing HTML labels (`foreignObject`). No remote conversion service is used. If an SVG cannot be decoded, export it as PNG and attach that image instead.
+
 ### Right-click Selected Text
 
 Select text on a web page or in Chrome's PDF viewer, right-click the selection, and choose **Capture selected text with IChat**. IChat opens the side panel and uses the text Chrome supplies as the new FlowContext. Auto-send on sends it through the configured provider flow; auto-send off leaves a draft ready for your question. This path uses plain text, requires no vision model or OCR, and does not touch the clipboard. It captures the selected text and available source metadata only, not surrounding paragraphs. The menu appears only when Chrome provides a text selection and follows IChat's UI language setting.

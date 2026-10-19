@@ -17,8 +17,8 @@ import {
   putAttachmentBlob,
   revokeObjectUrl
 } from "../lib/attachment-repository"
-import { normalizeImageBlob } from "../lib/media-processing"
-import { useI18n } from "../lib/i18n"
+import { isSvgMediaType, normalizeImageBlob } from "../lib/media-processing"
+import { useI18n, type TranslateFn } from "../lib/i18n"
 import { useDictation } from "../lib/use-dictation"
 import { composeFlowPrompt, dispatchStatusPayload, getFlowContextMode, getProviderModel, isAutoSendEnabled, providerLabels } from "../lib/prompt-builder"
 import { createRandomId } from "../lib/random-id"
@@ -56,7 +56,6 @@ interface LocalImageAttachment {
 
 type FileUIPart = Extract<UIMessage["parts"][number], { type: "file" }>
 type TextUIPart = Extract<UIMessage["parts"][number], { type: "text" }>
-const UNSUPPORTED_MODEL_IMAGE_MEDIA_TYPES = new Set(["image/svg+xml"])
 const SEARCH_MATCH_HIGHLIGHT = "ichat-search-match"
 const SEARCH_ACTIVE_HIGHLIGHT = "ichat-search-active"
 
@@ -200,15 +199,16 @@ function getTextSearchRanges(container: HTMLElement, query: string) {
   return ranges
 }
 
-async function filePartToModelPart(part: FileUIPart) {
+async function filePartToModelPart(part: FileUIPart, t: TranslateFn) {
   const url = part.url
-  if (part.mediaType.startsWith("image/")) {
+  if (part.mediaType.toLowerCase().startsWith("image/")) {
     const normalizeUnsupportedModelImage = async (blob: Blob, fallbackMediaType: string) => {
-      const normalized = await normalizeImageBlob(blob, part.filename)
+      const imageBlob = blob.type.startsWith("image/") ? blob : blob.slice(0, blob.size, fallbackMediaType)
+      const normalized = await normalizeImageBlob(imageBlob, part.filename)
       const nextMediaType = normalized.mediaType || fallbackMediaType || blob.type || "image/png"
 
-      if (UNSUPPORTED_MODEL_IMAGE_MEDIA_TYPES.has(nextMediaType)) {
-        throw new Error(`Unsupported image attachment type: ${nextMediaType}`)
+      if (isSvgMediaType(nextMediaType)) {
+        throw new Error(t("errors.svgConversionFailed"))
       }
 
       return {
@@ -218,7 +218,7 @@ async function filePartToModelPart(part: FileUIPart) {
       }
     }
 
-    if (UNSUPPORTED_MODEL_IMAGE_MEDIA_TYPES.has(part.mediaType)) {
+    if (isSvgMediaType(part.mediaType)) {
       if (url.startsWith("data:")) {
         return normalizeUnsupportedModelImage(await dataUrlToBlob(url), part.mediaType)
       }
@@ -274,7 +274,7 @@ async function filePartToModelPart(part: FileUIPart) {
   }
 }
 
-async function toModelMessages(messages: UIMessage[]): Promise<ModelMessage[]> {
+async function toModelMessages(messages: UIMessage[], t: TranslateFn): Promise<ModelMessage[]> {
   const modelMessages: ModelMessage[] = []
 
   for (const message of messages) {
@@ -301,7 +301,7 @@ async function toModelMessages(messages: UIMessage[]): Promise<ModelMessage[]> {
     }
 
     for (const filePart of extractUiMessageFiles(message)) {
-      parts.push(await filePartToModelPart(filePart))
+      parts.push(await filePartToModelPart(filePart, t))
     }
 
     modelMessages.push({
@@ -1499,7 +1499,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
       }
 
       try {
-        const modelMessages = await toModelMessages(requestMessages)
+        const modelMessages = await toModelMessages(requestMessages, t)
         const responseText = await streamProviderResponse(provider, apiKeys, settings, modelMessages, controller.signal, (partialText) => {
           const streamedMessages = replaceMessageText(messagesRef.current, assistantMessageId, partialText)
           messagesRef.current = streamedMessages

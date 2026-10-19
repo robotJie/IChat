@@ -270,6 +270,7 @@ export const zhCNCatalog = {
   "errors.missingApiKey": "缺少 {providerLabel} API Key。请先在设置中填写后再发送。",
   "errors.requestCancelled": "请求已取消。",
   "errors.noResponseReturned": "没有返回任何响应。",
+  "errors.svgConversionFailed": "无法将此 SVG 转换为图片，请将它导出为 PNG 后重新添加附件。",
   "errors.gemini.expectedKey": "Gemini 需要 Google AI Studio API Key，通常以“AIza”开头。请在设置中粘贴该 key。",
   "errors.gemini.rejectedRequest": "Gemini 拒绝了这次请求。通常说明 key 缺失、无效，或它并不是来自 Google AI Studio 的 Gemini API Key。请在设置中确认，并确保该 key 已启用 Gemini API。",
   "errors.gemini.modelUnavailable": "Gemini 模型“{modelId}”不支持当前 Generative AI API。可尝试 “gemini-2.5-flash” 或 “gemini-3-flash-preview”。",

@@ -285,6 +285,7 @@ export const enCatalog = {
   "errors.missingApiKey": "Missing {providerLabel} API key. Add it in Settings before sending.",
   "errors.requestCancelled": "Request cancelled.",
   "errors.noResponseReturned": "No response returned.",
+  "errors.svgConversionFailed": "This SVG could not be converted to an image. Export it as PNG and attach it again.",
   "errors.gemini.expectedKey": "Gemini expects a Google AI Studio API key, which usually starts with 'AIza'. Please paste that key in Settings.",
   "errors.gemini.rejectedRequest": "Gemini rejected the request. This usually means the key is missing, invalid, or not a Google AI Studio Gemini API key. Please verify the key in Settings and make sure the Gemini API is enabled for it.",
   "errors.gemini.modelUnavailable": "The Gemini model '{modelId}' is not available for the Generative AI API. Try 'gemini-2.5-flash' or 'gemini-3-flash-preview'.",

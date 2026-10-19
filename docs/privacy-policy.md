@@ -60,6 +60,8 @@ If the current target includes an image, IChat may process:
 - normalized image blobs stored locally
 - image metadata such as type, dimensions, alt text, caption text, and nearby text
 
+SVG image attachments are converted to PNG locally before being sent to the selected model provider. Conversion does not use a remote service.
+
 If direct media resolution is not available, IChat may use screenshot-based fallback for the visible area needed to complete the requested capture.
 
 For online PDFs opened in Chrome's native PDF viewer, triggering capture with the extension action or keyboard shortcut takes an image of the currently visible tab area, including visible PDF viewer controls. It does not extract the full PDF or the exact text selection. This image follows the same local IndexedDB storage and selected-provider image sending flow, including your auto-send setting. The screenshot fallback uses existing permissions and no remote PDF processing service.

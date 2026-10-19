@@ -17,7 +17,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export function guessImageExtension(mediaType: string | null | undefined) {
-  switch ((mediaType || "").toLowerCase()) {
+  switch ((mediaType || "").split(";")[0].trim().toLowerCase()) {
     case "image/jpeg":
       return "jpg"
     case "image/webp":
@@ -29,6 +29,10 @@ export function guessImageExtension(mediaType: string | null | undefined) {
     default:
       return "png"
   }
+}
+
+export function isSvgMediaType(mediaType: string | null | undefined) {
+  return (mediaType || "").split(";")[0].trim().toLowerCase() === "image/svg+xml"
 }
 
 function resolveAttachmentFilename(preferredFileName: string | null | undefined, mediaType: string) {
@@ -76,7 +80,7 @@ function parseSvgDimension(value: string | null | undefined) {
     return null
   }
 
-  const normalized = value.trim().match(/^([0-9]+(?:\.[0-9]+)?)/)
+  const normalized = value.trim().match(/^([0-9]+(?:\.[0-9]+)?)(?:px)?$/i)
   if (!normalized) {
     return null
   }
@@ -88,9 +92,9 @@ function parseSvgDimension(value: string | null | undefined) {
 function getSvgIntrinsicSize(svgMarkup: string) {
   const svgTagMatch = svgMarkup.match(/<svg\b[^>]*>/i)
   const svgTag = svgTagMatch?.[0] ?? ""
-  const width = parseSvgDimension(svgTag.match(/\bwidth=["']([^"']+)["']/i)?.[1])
-  const height = parseSvgDimension(svgTag.match(/\bheight=["']([^"']+)["']/i)?.[1])
-  const viewBox = svgTag.match(/\bviewBox=["']([^"']+)["']/i)?.[1]
+  const width = parseSvgDimension(svgTag.match(/\swidth\s*=\s*["']([^"']+)["']/i)?.[1])
+  const height = parseSvgDimension(svgTag.match(/\sheight\s*=\s*["']([^"']+)["']/i)?.[1])
+  const viewBox = svgTag.match(/\sviewBox\s*=\s*["']([^"']+)["']/i)?.[1]
 
   if (width && height) {
     return { width, height }
@@ -170,39 +174,45 @@ async function rasterizeSvgWithImageElement(blob: Blob) {
   const scale = longestSide > MAX_IMAGE_DIMENSION ? MAX_IMAGE_DIMENSION / longestSide : 1
   const width = Math.max(1, Math.round(intrinsicSize.width * scale))
   const height = Math.max(1, Math.round(intrinsicSize.height * scale))
-  const objectUrl = URL.createObjectURL(new Blob([svgMarkup], { type: "image/svg+xml" }))
+  const svgTag = svgMarkup.match(/<svg\b[^>]*>/i)?.[0]
+  if (!svgTag) {
+    throw new Error("SVG image is missing its root element")
+  }
 
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const element = new Image()
-      element.onload = () => resolve(element)
-      element.onerror = () => reject(new Error("Failed to decode SVG image"))
-      element.src = objectUrl
-    })
+  const namespace = /\sxmlns\s*=/.test(svgTag) ? "" : ' xmlns="http://www.w3.org/2000/svg"'
+  const sizedSvgTag = svgTag
+    .replace(/\s(?:width|height)\s*=\s*(["']).*?\1/gi, "")
+    .replace(/\/?>$/, (ending) => `${namespace} width="${intrinsicSize.width}" height="${intrinsicSize.height}"${ending}`)
+  const sizedSvgMarkup = svgMarkup.replace(svgTag, () => sizedSvgTag)
 
-    const canvas = createCanvas(width, height)
-    const context = canvas.getContext("2d") as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null
-    if (!context || typeof context.drawImage !== "function") {
-      throw new Error("Unable to acquire 2D context for SVG normalization")
-    }
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const element = new Image()
+    element.onload = () => resolve(element)
+    element.onerror = () => reject(new Error("Failed to decode SVG image"))
+    // Blob URLs taint Chromium canvases for SVGs containing foreignObject.
+    element.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sizedSvgMarkup)}`
+  })
 
-    context.drawImage(image, 0, 0, width, height)
-    return {
-      blob: await canvasToBlob(canvas, "image/png", 0.92),
-      mediaType: "image/png",
-      width,
-      height
-    }
-  } finally {
-    URL.revokeObjectURL(objectUrl)
+  const canvas = createCanvas(width, height)
+  const context = canvas.getContext("2d") as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null
+  if (!context || typeof context.drawImage !== "function") {
+    throw new Error("Unable to acquire 2D context for SVG normalization")
+  }
+
+  context.drawImage(image, 0, 0, width, height)
+  return {
+    blob: await canvasToBlob(canvas, "image/png", 0.92),
+    mediaType: "image/png",
+    width,
+    height
   }
 }
 
 export async function normalizeImageBlob(blob: Blob, preferredFileName?: string | null) {
   let workingBlob = blob
-  let mediaType = blob.type || "image/png"
+  let mediaType = blob.type.split(";")[0].trim().toLowerCase() || "image/png"
 
-  const shouldRasterize = mediaType === "image/svg+xml"
+  const shouldRasterize = isSvgMediaType(mediaType)
   const shouldResize = true
 
   try {
