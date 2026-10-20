@@ -1,5 +1,5 @@
 import type { ModelMessage, UIMessage } from "ai"
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import type { ClipboardEvent as ReactClipboardEvent } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeKatex from "rehype-katex"
@@ -18,6 +18,7 @@ import {
   revokeObjectUrl
 } from "../lib/attachment-repository"
 import { isSvgMediaType, normalizeImageBlob } from "../lib/media-processing"
+import { captureChatReadingPosition, getChatReadingScrollTop, isChatAtBottom, type ChatReadingPosition } from "../lib/chat-scroll"
 import { useI18n, type TranslateFn } from "../lib/i18n"
 import { useDictation } from "../lib/use-dictation"
 import { composeFlowPrompt, dispatchStatusPayload, getFlowContextMode, getProviderModel, isAutoSendEnabled, providerLabels } from "../lib/prompt-builder"
@@ -588,7 +589,7 @@ const ChatBubble = memo(function ChatBubble({ message }: { message: UIMessage })
   const [copied, setCopied] = useState(false)
 
   if (!text && fileParts.length === 0) {
-    return null
+    return role === "assistant" ? <article className="ichat-message is-assistant" data-message-id={message.id} aria-hidden="true" /> : null
   }
 
   const handleCopy = async () => {
@@ -922,6 +923,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
   const [searchSessionActive, setSearchSessionActive] = useState(false)
   const [activeSearchIndex, setActiveSearchIndex] = useState(0)
   const [searchNavigationSignal, setSearchNavigationSignal] = useState(0)
+  const [showReplyNavigation, setShowReplyNavigation] = useState(false)
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const threadContentRef = useRef<HTMLDivElement | null>(null)
@@ -929,6 +931,8 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
   const messagesRef = useRef<UIMessage[]>([])
   const isBusyRef = useRef(false)
   const shouldStickToBottomRef = useRef(true)
+  const readingPositionRef = useRef<ChatReadingPosition | null>(null)
+  const replyStartRef = useRef<string | null>(null)
   const lastPersistedJsonRef = useRef("[]")
   const abortControllerRef = useRef<AbortController | null>(null)
   const activePendingIdRef = useRef<string | null>(null)
@@ -1053,6 +1057,9 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
     abortControllerRef.current = null
     activePendingIdRef.current = null
     shouldStickToBottomRef.current = true
+    readingPositionRef.current = null
+    replyStartRef.current = null
+    setShowReplyNavigation(false)
     lastPersistedJsonRef.current = "[]"
     messagesRef.current = []
     setMessages([])
@@ -1172,6 +1179,8 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
     const viewport = viewportRef.current
     if (activeElement && viewport) {
       shouldStickToBottomRef.current = false
+      readingPositionRef.current = null
+      replyStartRef.current = null
       const viewportRect = viewport.getBoundingClientRect()
       const activeRect = activeElement.getBoundingClientRect()
       const targetTop = viewport.scrollTop + activeRect.top - viewportRect.top - (viewport.clientHeight - activeRect.height) / 2
@@ -1186,7 +1195,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
 
   const scrollThreadToBottom = useCallback(() => {
     const viewport = viewportRef.current
-    if (!viewport) {
+    if (!viewport || !shouldStickToBottomRef.current) {
       return
     }
 
@@ -1195,6 +1204,36 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
       behavior: "auto"
     })
   }, [])
+
+  const maintainReadingPosition = useCallback(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    if (shouldStickToBottomRef.current) {
+      scrollThreadToBottom()
+    } else if (readingPositionRef.current) {
+      const top = getChatReadingScrollTop(viewport, readingPositionRef.current)
+      if (top !== null) {
+        viewport.scrollTo({ top, behavior: "auto" })
+      } else {
+        readingPositionRef.current = null
+        replyStartRef.current = null
+        setShowReplyNavigation(!isChatAtBottom(viewport))
+      }
+    }
+  }, [scrollThreadToBottom])
+
+  const viewLatestReply = useCallback(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    const latestReply = [...messagesRef.current].reverse().find((message) => message.role === "assistant")
+      ?? messagesRef.current[messagesRef.current.length - 1]
+    if (!latestReply) return
+    shouldStickToBottomRef.current = false
+    replyStartRef.current = latestReply.id
+    readingPositionRef.current = { messageId: latestReply.id, blockIndex: null, offset: 16 }
+    setShowReplyNavigation(false)
+    maintainReadingPosition()
+  }, [maintainReadingPosition])
 
   useEffect(() => {
     if (!attachmentPrompt || !attachmentFlowContext) {
@@ -1261,19 +1300,9 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
     return () => window.clearTimeout(timer)
   }, [attachmentFlowContext, draftContextOpen, editorState])
 
-  useEffect(() => {
-    if (!hydrated) {
-      return
-    }
-
-    if (!shouldStickToBottomRef.current) {
-      return
-    }
-
-    const frame = window.requestAnimationFrame(scrollThreadToBottom)
-
-    return () => window.cancelAnimationFrame(frame)
-  }, [hydrated, messages, scrollThreadToBottom])
+  useLayoutEffect(() => {
+    if (hydrated) maintainReadingPosition()
+  }, [hydrated, messages, composerText, allActiveAttachments.length, maintainReadingPosition])
 
   useEffect(() => {
     const viewport = viewportRef.current
@@ -1282,13 +1311,36 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
     }
 
     const updateStickiness = () => {
-      const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
-      shouldStickToBottomRef.current = distanceFromBottom <= 72
+      if (replyStartRef.current && readingPositionRef.current) {
+        const top = getChatReadingScrollTop(viewport, readingPositionRef.current)
+        const clampedTop = top === null ? null : Math.min(top, Math.max(0, viewport.scrollHeight - viewport.clientHeight))
+        // Short replies cannot reach the top yet. Keep their start as the target as they grow.
+        if (clampedTop !== null && Math.abs(viewport.scrollTop - clampedTop) <= 1) {
+          return
+        }
+        replyStartRef.current = null
+      }
+      const atBottom = isChatAtBottom(viewport)
+      shouldStickToBottomRef.current = atBottom
+      setShowReplyNavigation(!atBottom)
+      readingPositionRef.current = atBottom ? null : captureChatReadingPosition(viewport)
+    }
+
+    const pauseOnScrollUp = (event: WheelEvent) => {
+      if (replyStartRef.current && event.deltaY !== 0) {
+        replyStartRef.current = null
+        updateStickiness()
+      }
+      if (event.deltaY < 0) shouldStickToBottomRef.current = false
     }
 
     updateStickiness()
     viewport.addEventListener("scroll", updateStickiness, { passive: true })
-    return () => viewport.removeEventListener("scroll", updateStickiness)
+    viewport.addEventListener("wheel", pauseOnScrollUp, { passive: true })
+    return () => {
+      viewport.removeEventListener("scroll", updateStickiness)
+      viewport.removeEventListener("wheel", pauseOnScrollUp)
+    }
   }, [])
 
   useEffect(() => {
@@ -1301,15 +1353,12 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
       return
     }
 
-    const observer = new ResizeObserver(() => {
-      if (shouldStickToBottomRef.current) {
-        scrollThreadToBottom()
-      }
-    })
+    const observer = new ResizeObserver(maintainReadingPosition)
 
     observer.observe(content)
+    if (viewportRef.current) observer.observe(viewportRef.current)
     return () => observer.disconnect()
-  }, [hydrated, scrollThreadToBottom])
+  }, [hydrated, maintainReadingPosition])
 
   useEffect(() => {
     let cancelled = false
@@ -1477,7 +1526,16 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
       const requestMessages = [...limitHistoryMessages(displayedHistory, settings.data.historyMessageLimit), requestMessage]
       const assistantMessageId = createRandomId()
       const optimisticMessages = [...displayedHistory, displayMessage, createMessage("assistant", "", [], assistantMessageId)]
-      shouldStickToBottomRef.current = true
+      const viewport = viewportRef.current
+      if (viewport && (!isChatAtBottom(viewport) || replyStartRef.current)) {
+        shouldStickToBottomRef.current = false
+        readingPositionRef.current = captureChatReadingPosition(viewport)
+        setShowReplyNavigation(true)
+      } else {
+        shouldStickToBottomRef.current = true
+        readingPositionRef.current = null
+      }
+      replyStartRef.current = null
       messagesRef.current = optimisticMessages
       setMessages(optimisticMessages)
       setIsBusy(true)
@@ -1715,6 +1773,7 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
   const sendLabel = isBusy ? t("chat.composer.stop") : allActiveAttachments.length > 0 ? t("chat.composer.sendWithImages") : attachmentPrompt ? t("chat.composer.sendWithContext") : t("chat.composer.send")
   const dictationLabel = dictation.phase === "transcribing" ? t("chat.dictation.cancel") : dictation.active ? t("chat.dictation.stop") : t("chat.dictation.start")
   const activeBanner = visionBlocked ? visionBlockedMessage : errorBanner
+  const latestReplyLabel = isBusy ? t("chat.scroll.generating") : t("chat.scroll.latest")
 
   return (
     <div className="ichat-conversation-shell">
@@ -1811,6 +1870,25 @@ export function ProviderConversation({ provider, settings, apiKeys, pendingPromp
             />
           </div>
         </div>
+        {hydrated && showReplyNavigation ? (
+          <div className="ichat-thread-navigation">
+            <button
+              className="ichat-thread-navigation-button"
+              type="button"
+              aria-label={latestReplyLabel}
+              onClick={viewLatestReply}>
+              {isBusy ? (
+                <span className="ichat-thread-generating-dots" aria-hidden="true">
+                  <span /><span /><span />
+                </span>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                  <path d="M12 4v16m-6-6 6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className={`ichat-composer-shell${dictation.active ? " is-listening" : ""}`}>

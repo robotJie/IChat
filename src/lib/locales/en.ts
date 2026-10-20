@@ -247,6 +247,8 @@ export const enCatalog = {
   "chat.composer.sendWithImages": "Send with images",
   "chat.composer.sendWithContext": "Send with context",
   "chat.composer.send": "Send",
+  "chat.scroll.generating": "New reply in progress. Jump to its beginning",
+  "chat.scroll.latest": "Jump to the beginning of the latest reply",
   "chat.composer.inputLabel": "Message",
   "chat.dictation.start": "Start dictation",
   "chat.dictation.stop": "Stop dictation",

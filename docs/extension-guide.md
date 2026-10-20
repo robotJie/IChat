@@ -109,6 +109,8 @@ Open **Settings** and add one of the following:
 
 ## Voice Input And Composer
 
+When you scroll up to read an earlier answer, sending a new question keeps your reading position while its reply appears below. A floating circular button shows three dots bouncing in sequence while a reply is generating, and a down arrow otherwise. Click it to jump to the beginning of the latest reply and read from there while generation continues. Short replies remain fully visible until they are long enough to align at the top. At the bottom, replies follow automatically; scrolling up pauses following again. This works in both the side panel and detached chat tab.
+
 The composer combines the text area and its controls in one panel. The arrow sends the draft; during generation it becomes a square that stops the response. Enter sends, Shift+Enter adds a line break, and confirming text with an input method does not send.
 
 Choose a speech provider in **Settings → STT Provider**, independently of the chat model:

@@ -232,6 +232,8 @@ export const zhCNCatalog = {
   "chat.composer.sendWithImages": "连同图片发送",
   "chat.composer.sendWithContext": "连同上下文发送",
   "chat.composer.send": "发送",
+  "chat.scroll.generating": "新回复正在生成，前往回复开头",
+  "chat.scroll.latest": "前往最新回复的开头",
   "chat.composer.inputLabel": "消息输入框",
   "chat.dictation.start": "开始听写",
   "chat.dictation.stop": "停止听写",
